@@ -96,6 +96,7 @@ Route::delete('/categories/{id}', 'App\\Http\\Controllers\\Admin@deleteCategory'
 Route::post('/products', 'App\\Http\\Controllers\\Admin@createProductWithImages');
 Route::post('/products/update', 'App\\Http\\Controllers\\Admin@updateProductWithImages');
 Route::get('/products/{id}', 'App\\Http\\Controllers\\Admin@getProductWithImages');
+Route::delete('/products/{id}', 'App\\Http\\Controllers\\Admin@deleteProduct');
 
 // Product Dashboard and User Inquiry Routes
 Route::post('/products/filter', [App\Http\Controllers\Admin::class, 'getFilteredProducts']);

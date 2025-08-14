@@ -2421,4 +2421,34 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    public function deleteProduct($id)
+    {
+        try {
+            $product = Product::findOrFail($id);
+            
+            // Delete associated product images from storage
+            $productImages = \App\Models\ProductImage::where('product_id', $id)->get();
+            foreach ($productImages as $image) {
+                if (Storage::exists($image->image)) {
+                    Storage::delete($image->image);
+                }
+                $image->delete();
+            }
+            
+            // Delete the product
+            $product->delete();
+            
+            return response()->json([
+                'status' => true, 
+                'message' => 'Product deleted successfully.'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false, 
+                'message' => 'Failed to delete product.', 
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
