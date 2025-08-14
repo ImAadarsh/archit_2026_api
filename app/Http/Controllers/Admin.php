@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Addres;
 use App\Models\Businesss;
+use App\Models\Category;
 use App\Models\Expenses;
 use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Locations;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\UserInquiry;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -1241,10 +1243,10 @@ public function getPurchaseSaleInvoice(Request $request){
     $totalGST = 0;
     $totalExcludingGST = 0;
     foreach ($invoices as $invoice) {
-        $invoice->total_gst = $invoice->total_igst + $invoice->total_cgst + $invoice->total_dgst;
-        $invoice->amount_excluding_gst = $invoice->total_amount - $invoice->total_gst;
-        $totalGST += $invoice->total_gst;
-        $totalExcludingGST += $invoice->amount_excluding_gst;
+        $computedTotalGst = $invoice->total_igst + $invoice->total_cgst + $invoice->total_dgst;
+        $computedAmountExGst = $invoice->total_amount - $computedTotalGst;
+        $totalGST += $computedTotalGst;
+        $totalExcludingGST += $computedAmountExGst;
     }
 
     // Calculate total amount and total transactions
@@ -1816,6 +1818,607 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    // Category CRUD
+    public function createCategory(Request $request)
+    {
+        $rules = [
+            'business_id' => 'required|exists:businessses,id',
+            'name' => 'required|string|max:255',
+            'image' => 'nullable', // base64 string
+            'extension' => 'nullable|string|max:10',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
 
+        try {
+            $category = new \App\Models\Category();
+            $category->business_id = $request->business_id;
+            $category->name = $request->name;
+
+            if ($request->has('image') && $request->image) {
+                $fileData = $request->image;
+                $ext = $request->extension ?: $this->getFileExtension($fileData);
+                $fileName = 'category_' . time() . '.' . $ext;
+                $filePath = 'public/categories/' . $fileName;
+                \Storage::put($filePath, base64_decode($fileData));
+                $category->image = $filePath;
+            }
+
+            $category->save();
+
+            return response()->json(['status' => true, 'message' => 'Category created successfully.', 'data' => $category], 201);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to create category.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function listCategories(Request $request)
+    {
+        $rules = [
+            'business_id' => 'required|exists:businessses,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        $categories = \App\Models\Category::where('business_id', $request->business_id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json(['status' => true, 'message' => 'Categories retrieved successfully.', 'data' => $categories], 200);
+    }
+
+    public function updateCategory(Request $request)
+    {
+        $rules = [
+            'id' => 'required|exists:categories,id',
+            'name' => 'sometimes|required|string|max:255',
+            'image' => 'nullable',
+            'extension' => 'nullable|string|max:10',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $category = \App\Models\Category::findOrFail($request->id);
+            if ($request->has('name')) {
+                $category->name = $request->name;
+            }
+            if ($request->has('image') && $request->image) {
+                $fileData = $request->image;
+                $ext = $request->extension ?: $this->getFileExtension($fileData);
+                $fileName = 'category_' . time() . '.' . $ext;
+                $filePath = 'public/categories/' . $fileName;
+                \Storage::put($filePath, base64_decode($fileData));
+                $category->image = $filePath;
+            }
+            $category->save();
+            return response()->json(['status' => true, 'message' => 'Category updated successfully.', 'data' => $category], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to update category.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function deleteCategory($id)
+    {
+        try {
+            $category = \App\Models\Category::findOrFail($id);
+            $category->delete();
+            return response()->json(['status' => true, 'message' => 'Category deleted successfully.'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to delete category.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    // Product CRUD with multiple images
+    public function createProductWithImages(Request $request)
+    {
+        $rules = [
+            'business_id' => 'required|exists:businessses,id',
+            'location_id' => 'required|exists:locations,id',
+            'name' => 'required|string|max:255',
+            'hsn_code' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'category_id' => 'nullable|exists:categories,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $product = new Product();
+            $product->business_id = $request->business_id;
+            $product->location_id = $request->location_id;
+            $product->name = $request->name;
+            $product->hsn_code = $request->hsn_code;
+            $product->price = $request->price;
+            $product->category_id = $request->category_id;
+            $product->product_serial_number = $request->product_serial_number;
+            $product->item_code = $request->item_code;
+            $product->height = $request->height;
+            $product->width = $request->width;
+            $product->is_framed = $request->is_framed ?? 0;
+            $product->is_include_gst = $request->is_include_gst ?? 0;
+            $product->artist_name = $request->artist_name;
+            $product->quantity = $request->quantity;
+            $product->is_temp = 0;
+            $product->save();
+
+            // Handle multiple images from multipart form data
+            $uploadedFiles = $request->allFiles();
+            
+            // Method 1: Check if 'images' field exists (single file or array)
+            if (isset($uploadedFiles['images'])) {
+                $images = $uploadedFiles['images'];
+                
+                if (is_array($images)) {
+                    foreach ($images as $index => $file) {
+                        if ($file && $file->isValid()) {
+                            $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                            $filePath = $file->storeAs('public/product_images', $fileName);
+                            
+                            \App\Models\ProductImage::create([
+                                'product_id' => $product->id,
+                                'image' => $filePath,
+                            ]);
+                        }
+                    }
+                } else {
+                    $file = $images;
+                    if ($file && $file->isValid()) {
+                        $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                        $filePath = $file->storeAs('public/product_images', $fileName);
+                        
+                        \App\Models\ProductImage::create([
+                            'product_id' => $product->id,
+                            'image' => $filePath,
+                        ]);
+                    }
+                }
+            }
+            // Method 2: Check for individual indexed files (images[0], images[1], etc.)
+            else {
+                $allInputs = $request->all();
+                foreach ($allInputs as $key => $value) {
+                    if (preg_match('/^images\[(\d+)\]$/', $key, $matches)) {
+                        $index = $matches[1];
+                        
+                        // Try to get the file using the raw key
+                        $file = null;
+                        
+                        if (isset($uploadedFiles[$key])) {
+                            $file = $uploadedFiles[$key];
+                        } else if ($request->hasFile($key)) {
+                            $file = $request->file($key);
+                        }
+                        
+                        if ($file && $file->isValid()) {
+                            $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                            $filePath = $file->storeAs('public/product_images', $fileName);
+                            
+                            \App\Models\ProductImage::create([
+                                'product_id' => $product->id,
+                                'image' => $filePath,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            $product->load(['category', 'images']);
+            
+            return response()->json(['status' => true, 'message' => 'Product created successfully.', 'data' => $product], 201);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to create product.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function updateProductWithImages(Request $request)
+    {
+        $rules = [
+            'id' => 'required|exists:products,id',
+            'name' => 'sometimes|required|string|max:255',
+            'hsn_code' => 'sometimes|required|string|max:255',
+            'price' => 'sometimes|required|numeric|min:0',
+            'category_id' => 'nullable|exists:categories,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $product = Product::findOrFail($request->id);
+            if ($request->has('name')) $product->name = $request->name;
+            if ($request->has('hsn_code')) $product->hsn_code = $request->hsn_code;
+            if ($request->has('price')) $product->price = $request->price;
+            if ($request->has('category_id')) $product->category_id = $request->category_id;
+            if ($request->has('location_id')) $product->location_id = $request->location_id;
+            if ($request->has('product_serial_number')) $product->product_serial_number = $request->product_serial_number;
+            if ($request->has('item_code')) $product->item_code = $request->item_code;
+            if ($request->has('height')) $product->height = $request->height;
+            if ($request->has('width')) $product->width = $request->width;
+            if ($request->has('is_framed')) $product->is_framed = $request->is_framed;
+            if ($request->has('is_include_gst')) $product->is_include_gst = $request->is_include_gst;
+            if ($request->has('artist_name')) $product->artist_name = $request->artist_name;
+            if ($request->has('quantity')) $product->quantity = $request->quantity;
+            $product->save();
+
+            // Handle image deletions
+            $allData = $request->all();
+            foreach ($allData as $key => $value) {
+                if (strpos($key, 'delete_image_ids[') === 0) {
+                    $imageId = (int)$value;
+                    $imageToDelete = \App\Models\ProductImage::where('id', $imageId)
+                        ->where('product_id', $product->id)
+                        ->first();
+                    if ($imageToDelete) {
+                        // Delete the file from storage
+                        if (\Storage::exists($imageToDelete->image)) {
+                            \Storage::delete($imageToDelete->image);
+                        }
+                        $imageToDelete->delete();
+                    }
+                }
+            }
+
+            // Handle new images from multipart form data
+            $allInputs = $request->all();
+            foreach ($allInputs as $key => $value) {
+                if (strpos($key, 'images[') === 0) {
+                    $file = $request->file($key);
+                    if ($file && $file->isValid()) {
+                        $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                        $filePath = $file->storeAs('public/product_images', $fileName);
+                        
+                        \App\Models\ProductImage::create([
+                            'product_id' => $product->id,
+                            'image' => $filePath,
+                        ]);
+                    }
+                }
+            }
+
+            $product->load(['category', 'images']);
+            return response()->json(['status' => true, 'message' => 'Product updated successfully.', 'data' => $product], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to update product.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getProductWithImages($id)
+    {
+        try {
+            $product = Product::with(['category', 'images'])->findOrFail($id);
+            return response()->json(['status' => true, 'message' => 'Product retrieved successfully.', 'data' => $product], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve product.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    // Product Dashboard and User Inquiry APIs
+    public function getFilteredProducts(Request $request)
+    {
+        $rules = [
+            'business_id' => 'required|exists:businessses,id',
+            'location_id' => 'required|exists:locations,id',
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            // Debug: Log the request parameters
+            \Log::info('Filter request:', $request->all());
+            
+            $query = Product::with(['category', 'images'])
+                ->where('business_id', $request->business_id)
+                ->where('location_id', $request->location_id);
+                // Temporarily removed ->where('is_temp', 0) to debug
+            
+            // Debug: Log the base query count
+            $baseCount = $query->count();
+            \Log::info("Base query count (business_id: {$request->business_id}, location_id: {$request->location_id}): {$baseCount}");
+
+            // Category filter (multiple categories)
+            if ($request->has('categories') && is_array($request->categories)) {
+                $query->whereIn('category_id', $request->categories);
+            }
+
+            // Price range filter
+            if ($request->has('min_price') && is_numeric($request->min_price)) {
+                $query->where('price', '>=', $request->min_price);
+            }
+            if ($request->has('max_price') && is_numeric($request->max_price)) {
+                $query->where('price', '<=', $request->max_price);
+            }
+
+            // Size filters
+            if ($request->has('min_height') && is_numeric($request->min_height)) {
+                $query->where('height', '>=', $request->min_height);
+            }
+            if ($request->has('max_height') && is_numeric($request->max_height)) {
+                $query->where('height', '<=', $request->max_height);
+            }
+            if ($request->has('min_width') && is_numeric($request->min_width)) {
+                $query->where('width', '>=', $request->min_width);
+            }
+            if ($request->has('max_width') && is_numeric($request->max_width)) {
+                $query->where('width', '<=', $request->max_width);
+            }
+
+            // Artist name filter
+            if ($request->has('artist_name') && !empty($request->artist_name)) {
+                $query->where('artist_name', 'LIKE', '%' . $request->artist_name . '%');
+            }
+
+            // Framed filter
+            if ($request->has('is_framed')) {
+                $query->where('is_framed', $request->is_framed);
+            }
+
+            // Include GST filter
+            if ($request->has('is_include_gst')) {
+                $query->where('is_include_gst', $request->is_include_gst);
+            }
+
+            // Quantity filter
+            if ($request->has('min_quantity') && is_numeric($request->min_quantity)) {
+                $query->where('quantity', '>=', $request->min_quantity);
+            }
+
+            // Product serial number filter
+            if ($request->has('product_serial_number') && !empty($request->product_serial_number)) {
+                $query->where('product_serial_number', 'LIKE', '%' . $request->product_serial_number . '%');
+            }
+
+            // Item code filter
+            if ($request->has('item_code') && !empty($request->item_code)) {
+                $query->where('item_code', 'LIKE', '%' . $request->item_code . '%');
+            }
+
+            // Name filter
+            if ($request->has('name') && !empty($request->name)) {
+                $query->where('name', 'LIKE', '%' . $request->name . '%');
+            }
+
+            // HSN code filter
+            if ($request->has('hsn_code') && !empty($request->hsn_code)) {
+                $query->where('hsn_code', 'LIKE', '%' . $request->hsn_code . '%');
+            }
+
+            // Sorting
+            $sortBy = $request->get('sort_by', 'created_at');
+            $sortOrder = $request->get('sort_order', 'desc');
+            $allowedSortFields = ['name', 'price', 'created_at', 'artist_name', 'height', 'width', 'quantity'];
+            
+            if (in_array($sortBy, $allowedSortFields)) {
+                $query->orderBy($sortBy, $sortOrder);
+            }
+
+            // Debug: Log the final query count before pagination
+            $finalCount = $query->count();
+            \Log::info("Final query count after filters: {$finalCount}");
+            
+            // Pagination
+            $perPage = $request->get('per_page', 12);
+            $products = $query->paginate($perPage);
+
+            // Get filter options for UI
+            $filterOptions = [
+                'categories' => Category::where('business_id', $request->business_id)->get(['id', 'name']),
+                'price_range' => [
+                    'min' => Product::where('business_id', $request->business_id)->min('price'),
+                    'max' => Product::where('business_id', $request->business_id)->max('price')
+                ],
+                'size_range' => [
+                    'height' => [
+                        'min' => Product::where('business_id', $request->business_id)->min('height'),
+                        'max' => Product::where('business_id', $request->business_id)->max('height')
+                    ],
+                    'width' => [
+                        'min' => Product::where('business_id', $request->business_id)->min('width'),
+                        'max' => Product::where('business_id', $request->business_id)->max('width')
+                    ]
+                ],
+                'artists' => Product::where('business_id', $request->business_id)
+                    ->whereNotNull('artist_name')
+                    ->distinct()
+                    ->pluck('artist_name')
+                    ->filter()
+                    ->values()
+            ];
+
+            // Debug: Also return the raw counts for debugging
+            return response()->json([
+                'status' => true,
+                'message' => 'Products retrieved successfully.',
+                'data' => $products,
+                'filter_options' => $filterOptions,
+                'debug' => [
+                    'base_count' => $baseCount,
+                    'final_count' => $finalCount,
+                    'business_id' => $request->business_id,
+                    'location_id' => $request->location_id
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve products.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    // Debug endpoint to check all products
+    public function getAllProductsDebug(Request $request)
+    {
+        try {
+            $products = Product::with(['category', 'images'])->get();
+            $totalCount = Product::count();
+            $businessCount = Product::where('business_id', $request->business_id ?? 0)->count();
+            $locationCount = Product::where('location_id', $request->location_id ?? 0)->count();
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Debug info retrieved',
+                'data' => [
+                    'total_products' => $totalCount,
+                    'business_products' => $businessCount,
+                    'location_products' => $locationCount,
+                    'sample_products' => $products->take(5)
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Debug failed', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function submitUserInquiry(Request $request)
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'mobile' => 'nullable|string|max:20',
+            'business_id' => 'required|exists:businessses,id',
+            'location_id' => 'required|exists:locations,id',
+            'filter_data' => 'nullable|array',
+            'selected_products' => 'nullable|array',
+            'inquiry_notes' => 'nullable|string'
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $inquiry = UserInquiry::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'mobile' => $request->mobile,
+                'business_id' => $request->business_id,
+                'location_id' => $request->location_id,
+                'filter_data' => $request->filter_data,
+                'selected_products' => $request->selected_products,
+                'inquiry_notes' => $request->inquiry_notes,
+                'status' => 'pending'
+            ]);
+
+            $inquiry->load(['business', 'location']);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Inquiry submitted successfully.',
+                'data' => $inquiry
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to submit inquiry.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getUserInquiries(Request $request)
+    {
+        $rules = [
+            'business_id' => 'required|exists:businessses,id',
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $query = UserInquiry::with(['business', 'location'])
+                ->where('business_id', $request->business_id);
+
+            // Location filter
+            if ($request->has('location_id')) {
+                $query->where('location_id', $request->location_id);
+            }
+
+            // Status filter
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+
+            // Date range filter
+            if ($request->has('start_date')) {
+                $query->whereDate('created_at', '>=', $request->start_date);
+            }
+            if ($request->has('end_date')) {
+                $query->whereDate('created_at', '<=', $request->end_date);
+            }
+
+            // Search by name, email, or mobile
+            if ($request->has('search') && !empty($request->search)) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'LIKE', '%' . $search . '%')
+                      ->orWhere('email', 'LIKE', '%' . $search . '%')
+                      ->orWhere('mobile', 'LIKE', '%' . $search . '%');
+                });
+            }
+
+            // Sorting
+            $sortBy = $request->get('sort_by', 'created_at');
+            $sortOrder = $request->get('sort_order', 'desc');
+            $allowedSortFields = ['name', 'email', 'mobile', 'status', 'created_at'];
+            
+            if (in_array($sortBy, $allowedSortFields)) {
+                $query->orderBy($sortBy, $sortOrder);
+            }
+
+            // Pagination
+            $perPage = $request->get('per_page', 15);
+            $inquiries = $query->paginate($perPage);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Inquiries retrieved successfully.',
+                'data' => $inquiries
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve inquiries.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function updateInquiryStatus(Request $request)
+    {
+        $rules = [
+            'inquiry_id' => 'required|exists:user_inquiries,id',
+            'status' => 'required|in:pending,contacted,completed,cancelled'
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $inquiry = UserInquiry::find($request->inquiry_id);
+            $inquiry->status = $request->status;
+            $inquiry->save();
+
+            $inquiry->load(['business', 'location']);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Inquiry status updated successfully.',
+                'data' => $inquiry
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to update inquiry status.', 'error' => $e->getMessage()], 500);
+        }
+    }
 
 }

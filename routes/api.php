@@ -85,3 +85,23 @@ Route::post("/getBulkInvoicesSelected",'App\Http\Controllers\Admin@getBulkInvoic
 Route::get("/getItemizedSalesReport",'App\Http\Controllers\Admin@getItemizedSalesReport');
 Route::get("/getlocations",'App\Http\Controllers\Admin@getlocations');
 Route::get("/getProducts",'App\Http\Controllers\Admin@getProducts');
+
+// Categories
+Route::post('/categories', 'App\\Http\\Controllers\\Admin@createCategory');
+Route::get('/categories', 'App\\Http\\Controllers\\Admin@listCategories');
+Route::post('/categories/update', 'App\\Http\\Controllers\\Admin@updateCategory');
+Route::delete('/categories/{id}', 'App\\Http\\Controllers\\Admin@deleteCategory');
+
+// Products with images
+Route::post('/products', 'App\\Http\\Controllers\\Admin@createProductWithImages');
+Route::post('/products/update', 'App\\Http\\Controllers\\Admin@updateProductWithImages');
+Route::get('/products/{id}', 'App\\Http\\Controllers\\Admin@getProductWithImages');
+
+// Product Dashboard and User Inquiry Routes
+Route::post('/products/filter', [App\Http\Controllers\Admin::class, 'getFilteredProducts']);
+Route::post('/inquiries/submit', [App\Http\Controllers\Admin::class, 'submitUserInquiry']);
+Route::get('/inquiries', [App\Http\Controllers\Admin::class, 'getUserInquiries']);
+Route::put('/inquiries/status', [App\Http\Controllers\Admin::class, 'updateInquiryStatus']);
+
+// Debug route
+Route::get('/products/debug', [App\Http\Controllers\Admin::class, 'getAllProductsDebug']);
