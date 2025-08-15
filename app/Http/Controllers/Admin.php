@@ -105,9 +105,7 @@ class Admin extends Controller
 public function createInvoice(Request $request)
 {
     $rules = [
-        'type' => 'required|in:normal,performa',
-        'full_paid' => 'nullable|integer',
-        'total_paid' => 'nullable|numeric|min:0',
+        'type' => 'required|in:normal,performa'
     ];
 
     $validator = Validator::make($request->all(), $rules);
@@ -431,9 +429,7 @@ public function cancelInvoice($id){
 public function editInvoice(Request $request)
 {
     $rules = [
-        'id' => 'required|exists:invoices,id',
-        'full_paid' => 'nullable|integer',
-        'total_paid' => 'nullable|numeric|min:0',
+        'id' => 'required|exists:invoices,id'
     ];
 
     $validator = Validator::make($request->all(), $rules);
