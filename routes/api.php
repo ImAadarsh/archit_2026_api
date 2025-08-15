@@ -106,3 +106,6 @@ Route::put('/inquiries/status', [App\Http\Controllers\Admin::class, 'updateInqui
 
 // Debug route
 Route::get('/products/debug', [App\Http\Controllers\Admin::class, 'getAllProductsDebug']);
+
+// Business details
+Route::get('/business/{id}', [App\Http\Controllers\Admin::class, 'getBusinessDetails']);

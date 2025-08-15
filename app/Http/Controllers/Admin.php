@@ -2472,4 +2472,43 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    public function getBusinessDetails($businessId)
+    {
+        try {
+            // Find the business by ID
+            $business = Businesss::find($businessId);
+            
+            if (!$business) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Business not found.'
+                ], 404);
+            }
+            
+            // Return only the required fields
+            $businessDetails = [
+                'id' => $business->id,
+                'business_name' => $business->business_name,
+                'logo' => $business->logo,
+                'phone' => $business->phone,
+                'email' => $business->email,
+                'gst' => $business->gst,
+                'is_active' => $business->is_active
+            ];
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Business details retrieved successfully.',
+                'data' => $businessDetails
+            ], 200);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve business details.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
