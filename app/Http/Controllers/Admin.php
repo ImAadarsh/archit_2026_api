@@ -106,7 +106,7 @@ public function createInvoice(Request $request)
 {
     $rules = [
         'type' => 'required|in:normal,performa',
-        'full_paid' => 'nullable|boolean',
+        'full_paid' => 'nullable|integer',
         'total_paid' => 'nullable|numeric|min:0',
     ];
 
@@ -432,7 +432,7 @@ public function editInvoice(Request $request)
 {
     $rules = [
         'id' => 'required|exists:invoices,id',
-        'full_paid' => 'nullable|boolean',
+        'full_paid' => 'nullable|integer',
         'total_paid' => 'nullable|numeric|min:0',
     ];
 
