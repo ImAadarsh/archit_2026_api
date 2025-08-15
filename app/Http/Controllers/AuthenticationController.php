@@ -53,6 +53,7 @@ class AuthenticationController extends Controller
                     $user->location_id = $request->location_id;
                 }
                 $user->save();
+                $user->load('business');
                 return response(["status" => true, "message" => "User is verified sucessfully.", "data" => $user], 200);
 
             } else {
@@ -72,7 +73,7 @@ class AuthenticationController extends Controller
             if (!User::where('phone', $request->phone)->first()) {
                 return response(["status" => "failed", "message" => "User is not Registered."], 401);
             }
-            $user = User::where('phone', $request->phone)->first();
+            $user = User::with('business')->where('phone', $request->phone)->first();
             if (!($request->password == $user->passcode)) {
                 return response(["status" => "failed", "message" => "Incorrect Password"], 401);
             } else {
@@ -127,6 +128,7 @@ class AuthenticationController extends Controller
                 $user->name = $request->name;
                 $user->passcode = $request->password;
                 $user->save();
+                $user->load('business');
                 return response(["status" => true, "message" => "User is Updated sucessfully.", "data" => $user], 201);
 
             } else {

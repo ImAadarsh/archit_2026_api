@@ -20,6 +20,12 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'phone',
+        'passcode',
+        'role',
+        'business_id',
+        'location_id',
+        'is_active',
         'password',
     ];
 
@@ -42,4 +48,12 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    /**
+     * Get the business associated with the user.
+     */
+    public function business()
+    {
+        return $this->belongsTo(Businesss::class, 'business_id');
+    }
 }
