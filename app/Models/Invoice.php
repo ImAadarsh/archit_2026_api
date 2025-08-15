@@ -26,7 +26,9 @@ class Invoice extends Model
         'total_dgst',
         'total_cgst',
         'total_igst',
-        'total_amount'
+        'total_amount',
+        'full_paid',
+        'total_paid'
     ];
 
     // You can also add type casting for certain attributes
@@ -35,6 +37,8 @@ class Invoice extends Model
         'total_cgst' => 'float',
         'total_igst' => 'float',
         'total_amount' => 'float',
+        'full_paid' => 'boolean',
+        'total_paid' => 'float',
     ];
     public function items()
     {
