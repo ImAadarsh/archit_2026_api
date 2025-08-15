@@ -53,7 +53,17 @@ class AuthenticationController extends Controller
                     $user->location_id = $request->location_id;
                 }
                 $user->save();
-                $user->load('business');
+                
+                // Get business logo if user has business_id
+                $logo = null;
+                if ($user->business_id) {
+                    $business = \App\Models\Businesss::find($user->business_id);
+                    $logo = $business ? $business->logo : null;
+                }
+                
+                // Add logo to user object
+                $user->logo = $logo;
+                
                 return response(["status" => true, "message" => "User is verified sucessfully.", "data" => $user], 200);
 
             } else {
@@ -73,10 +83,20 @@ class AuthenticationController extends Controller
             if (!User::where('phone', $request->phone)->first()) {
                 return response(["status" => "failed", "message" => "User is not Registered."], 401);
             }
-            $user = User::with('business')->where('phone', $request->phone)->first();
+            $user = User::where('phone', $request->phone)->first();
             if (!($request->password == $user->passcode)) {
                 return response(["status" => "failed", "message" => "Incorrect Password"], 401);
             } else {
+                // Get business logo if user has business_id
+                $logo = null;
+                if ($user->business_id) {
+                    $business = \App\Models\Businesss::find($user->business_id);
+                    $logo = $business ? $business->logo : null;
+                }
+                
+                // Add logo to user object
+                $user->logo = $logo;
+                
                 $response = [
                     'status' => true,
                     'user' => $user,
@@ -128,7 +148,17 @@ class AuthenticationController extends Controller
                 $user->name = $request->name;
                 $user->passcode = $request->password;
                 $user->save();
-                $user->load('business');
+                
+                // Get business logo if user has business_id
+                $logo = null;
+                if ($user->business_id) {
+                    $business = \App\Models\Businesss::find($user->business_id);
+                    $logo = $business ? $business->logo : null;
+                }
+                
+                // Add logo to user object
+                $user->logo = $logo;
+                
                 return response(["status" => true, "message" => "User is Updated sucessfully.", "data" => $user], 201);
 
             } else {
