@@ -134,6 +134,8 @@ public function createInvoice(Request $request)
             'type' => $request->type,
             'is_completed' => 0,
             'invoice_date' => $request->invoice_date,
+            'full_paid' => $request->full_paid,
+            'total_paid' => $request->total_paid
         ]);
 
         DB::commit();
@@ -405,6 +407,25 @@ public function getBulkInvoicesWeb(Request $request)
     }
 }
 
+public function cancelInvoice($id){
+    try {
+        // Find the invoice by ID
+        $invoice = Invoice::find($id);
+
+        // If invoice not found, return error
+        if (!$invoice) {
+            return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+        }
+
+        // Delete the invoice
+        $invoice->is_cancelled = 1;
+        $invoice->save();
+
+        return response()->json(['status' => true, 'message' => 'Invoice cancelled successfully.'], 200);
+    } catch (\Exception $e) {
+        return response()->json(['status' => false, 'message' => 'Failed to delete invoice.', 'error' => $e->getMessage()], 500);
+    }
+}
 public function editInvoice(Request $request)
 {
     $rules = [
@@ -425,7 +446,7 @@ public function editInvoice(Request $request)
         $updatableFields = [
             'name', 'mobile_number', 'customer_type', 'doc_type', 'doc_no',
             'business_id', 'location_id', 'payment_mode', 'billing_address_id',
-            'shipping_address_id', 'is_completed', 'invoice_date'
+            'shipping_address_id', 'is_completed', 'invoice_date', 'full_paid', 'total_paid'
         ];
 
         $updateData = $request->only($updatableFields);

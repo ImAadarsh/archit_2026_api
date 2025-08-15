@@ -46,7 +46,7 @@ Route::post('/webhooks/razorpay', 'App\\Http\\Controllers\\BillingController@web
 Route::post("/createInvoice",'App\Http\Controllers\Admin@createInvoice');
 Route::get("/invoice/delete/{id}",'App\Http\Controllers\Admin@removeInvoice');
 Route::post("/editInvoice",'App\Http\Controllers\Admin@editInvoice');
-
+Route::get("/invoice/cancel/{id}",'App\Http\Controllers\Admin@cancelInvoice');
 
 Route::post("/addProduct",'App\Http\Controllers\Admin@addProduct');
 Route::post("/editProduct",'App\Http\Controllers\Admin@editProduct');
