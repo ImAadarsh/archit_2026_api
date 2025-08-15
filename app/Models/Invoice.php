@@ -37,7 +37,7 @@ class Invoice extends Model
         'total_cgst' => 'float',
         'total_igst' => 'float',
         'total_amount' => 'float',
-        'full_paid' => 'boolean',
+        'full_paid' => 'integer',
         'total_paid' => 'float',
     ];
     public function items()
