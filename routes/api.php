@@ -92,6 +92,13 @@ Route::get('/categories', 'App\\Http\\Controllers\\Admin@listCategories');
 Route::post('/categories/update', 'App\\Http\\Controllers\\Admin@updateCategory');
 Route::delete('/categories/{id}', 'App\\Http\\Controllers\\Admin@deleteCategory');
 
+// Product Categories (Art Categories)
+Route::post('/product-categories', 'App\\Http\\Controllers\\Admin@createProductCategory');
+Route::get('/product-categories', 'App\\Http\\Controllers\\Admin@listProductCategories');
+Route::get('/product-categories/by-category', 'App\\Http\\Controllers\\Admin@getProductCategoriesByCategory');
+Route::post('/product-categories/update', 'App\\Http\\Controllers\\Admin@updateProductCategory');
+Route::delete('/product-categories/{id}', 'App\\Http\\Controllers\\Admin@deleteProductCategory');
+
 // Products with images
 Route::post('/products', 'App\\Http\\Controllers\\Admin@createProductWithImages');
 Route::post('/products/update', 'App\\Http\\Controllers\\Admin@updateProductWithImages');

@@ -1936,6 +1936,117 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    // Product Category (Art Category) CRUD
+    public function createProductCategory(Request $request)
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'category_id' => 'required|exists:categories,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $productCategory = new \App\Models\ProductCategory();
+            $productCategory->name = $request->name;
+            $productCategory->category_id = $request->category_id;
+            $productCategory->save();
+
+            $productCategory->load('category');
+
+            return response()->json(['status' => true, 'message' => 'Art Category created successfully.', 'data' => $productCategory], 201);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to create art category.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function listProductCategories(Request $request)
+    {
+        $rules = [
+            'business_id' => 'required|exists:businessses,id',
+            'category_id' => 'nullable|exists:categories,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        $query = \App\Models\ProductCategory::with('category')
+            ->whereHas('category', function($query) use ($request) {
+                $query->where('business_id', $request->business_id);
+            });
+
+        // Filter by category_id if provided
+        if ($request->has('category_id') && $request->category_id) {
+            $query->where('category_id', $request->category_id);
+        }
+
+        $productCategories = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json(['status' => true, 'message' => 'Art Categories retrieved successfully.', 'data' => $productCategories], 200);
+    }
+
+    public function updateProductCategory(Request $request)
+    {
+        $rules = [
+            'id' => 'required|exists:product_category,id',
+            'name' => 'sometimes|required|string|max:255',
+            'category_id' => 'sometimes|required|exists:categories,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $productCategory = \App\Models\ProductCategory::findOrFail($request->id);
+            if ($request->has('name')) {
+                $productCategory->name = $request->name;
+            }
+            if ($request->has('category_id')) {
+                $productCategory->category_id = $request->category_id;
+            }
+            $productCategory->save();
+
+            $productCategory->load('category');
+
+            return response()->json(['status' => true, 'message' => 'Art Category updated successfully.', 'data' => $productCategory], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to update art category.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function deleteProductCategory($id)
+    {
+        try {
+            $productCategory = \App\Models\ProductCategory::findOrFail($id);
+            $productCategory->delete();
+            return response()->json(['status' => true, 'message' => 'Art Category deleted successfully.'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to delete art category.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getProductCategoriesByCategory(Request $request)
+    {
+        $rules = [
+            'category_id' => 'required|exists:categories,id',
+        ];
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        $productCategories = \App\Models\ProductCategory::with('category')
+            ->where('category_id', $request->category_id)
+            ->orderBy('name', 'asc')
+            ->get();
+
+        return response()->json(['status' => true, 'message' => 'Art Categories retrieved successfully.', 'data' => $productCategories], 200);
+    }
+
     // Product CRUD with multiple images
     public function createProductWithImages(Request $request)
     {
