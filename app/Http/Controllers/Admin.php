@@ -1953,6 +1953,15 @@ public function getItemizedSalesReport(Request $request)
         }
 
         try {
+            // Debug: Log request details for Android debugging
+            \Log::info('=== ANDROID DEBUG: Product Creation Request ===');
+            \Log::info('Request method: ' . $request->method());
+            \Log::info('Content type: ' . $request->header('Content-Type'));
+            \Log::info('Content length: ' . $request->header('Content-Length'));
+            \Log::info('All inputs: ' . json_encode(array_keys($request->all())));
+            \Log::info('Files received: ' . json_encode(array_keys($request->allFiles())));
+            \Log::info('Raw input size: ' . strlen($request->getContent()) . ' bytes');
+            
             $product = new Product();
             $product->business_id = $request->business_id;
             $product->location_id = $request->location_id;
@@ -1971,16 +1980,24 @@ public function getItemizedSalesReport(Request $request)
             $product->is_temp = 0;
             $product->save();
 
+            \Log::info('Product created with ID: ' . $product->id);
+
             // Handle multiple images from multipart form data
             $uploadedFiles = $request->allFiles();
+            \Log::info('Processing images... All files: ' . json_encode(array_keys($uploadedFiles)));
+            
+            $imageCount = 0;
             
             // Method 1: Check if 'images' field exists (single file or array)
             if (isset($uploadedFiles['images'])) {
+                \Log::info('Found images field in uploaded files');
                 $images = $uploadedFiles['images'];
                 
                 if (is_array($images)) {
+                    \Log::info('Images is an array with ' . count($images) . ' items');
                     foreach ($images as $index => $file) {
                         if ($file && $file->isValid()) {
+                            \Log::info('Processing image ' . $index . ': ' . $file->getClientOriginalName() . ' (' . $file->getSize() . ' bytes)');
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
                             
@@ -1988,9 +2005,14 @@ public function getItemizedSalesReport(Request $request)
                                 'product_id' => $product->id,
                                 'image' => $filePath,
                             ]);
+                            $imageCount++;
+                            \Log::info('Image saved: ' . $filePath);
+                        } else {
+                            \Log::info('Image ' . $index . ' is invalid or null');
                         }
                     }
                 } else {
+                    \Log::info('Images is a single file: ' . $images->getClientOriginalName() . ' (' . $images->getSize() . ' bytes)');
                     $file = $images;
                     if ($file && $file->isValid()) {
                         $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
@@ -2000,26 +2022,35 @@ public function getItemizedSalesReport(Request $request)
                             'product_id' => $product->id,
                             'image' => $filePath,
                         ]);
+                        $imageCount++;
+                        \Log::info('Image saved: ' . $filePath);
                     }
                 }
             }
             // Method 2: Check for individual indexed files (images[0], images[1], etc.)
             else {
+                \Log::info('No images field found, checking for indexed images...');
                 $allInputs = $request->all();
                 foreach ($allInputs as $key => $value) {
                     if (preg_match('/^images\[(\d+)\]$/', $key, $matches)) {
                         $index = $matches[1];
+                        \Log::info('Found indexed image field: ' . $key);
                         
                         // Try to get the file using the raw key
                         $file = null;
                         
                         if (isset($uploadedFiles[$key])) {
                             $file = $uploadedFiles[$key];
+                            \Log::info('Found file in uploadedFiles for key: ' . $key);
                         } else if ($request->hasFile($key)) {
                             $file = $request->file($key);
+                            \Log::info('Found file using hasFile for key: ' . $key);
+                        } else {
+                            \Log::info('No file found for key: ' . $key);
                         }
                         
                         if ($file && $file->isValid()) {
+                            \Log::info('Processing indexed image ' . $index . ': ' . $file->getClientOriginalName() . ' (' . $file->getSize() . ' bytes)');
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
                             
@@ -2027,12 +2058,17 @@ public function getItemizedSalesReport(Request $request)
                                 'product_id' => $product->id,
                                 'image' => $filePath,
                             ]);
+                            $imageCount++;
+                            \Log::info('Indexed image saved: ' . $filePath);
                         }
                     }
                 }
             }
 
             $product->load(['category', 'images']);
+            
+            \Log::info('Total images processed: ' . $imageCount);
+            \Log::info('=== END ANDROID DEBUG ===');
             
             return response()->json(['status' => true, 'message' => 'Product created successfully.', 'data' => $product], 201);
         } catch (\Exception $e) {
