@@ -111,4 +111,4 @@ Route::get('/products/debug', [App\Http\Controllers\Admin::class, 'getAllProduct
 Route::get('/business/{id}', [App\Http\Controllers\Admin::class, 'getBusinessDetails']);
 
 // Get all products with images
-Route::get('/products/all', [App\Http\Controllers\Admin::class, 'getAllProductsWithImages']);
+Route::get('/products-with-images', [App\Http\Controllers\Admin::class, 'getAllProductsWithImages']);
