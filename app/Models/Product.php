@@ -17,6 +17,7 @@ class Product extends Model
         'price',
         'product_serial_number',
         'category_id',
+        'art_category_id',
         'item_code',
         'height',
         'width',
@@ -30,6 +31,11 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function artCategory()
+    {
+        return $this->belongsTo(ProductCategory::class, 'art_category_id');
     }
 
     public function images()

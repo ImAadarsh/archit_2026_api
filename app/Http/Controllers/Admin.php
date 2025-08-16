@@ -2057,6 +2057,7 @@ public function getItemizedSalesReport(Request $request)
             'hsn_code' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
             'category_id' => 'nullable|exists:categories,id',
+            'art_category_id' => 'nullable|exists:product_category,id',
         ];
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
@@ -2071,6 +2072,7 @@ public function getItemizedSalesReport(Request $request)
             $product->hsn_code = $request->hsn_code;
             $product->price = $request->price;
             $product->category_id = $request->category_id;
+            $product->art_category_id = $request->art_category_id;
             $product->product_serial_number = $request->product_serial_number;
             $product->item_code = $request->item_code;
             $product->height = $request->height;
@@ -2143,7 +2145,7 @@ public function getItemizedSalesReport(Request $request)
                 }
             }
 
-            $product->load(['category', 'images']);
+            $product->load(['category', 'artCategory', 'images']);
             
             return response()->json(['status' => true, 'message' => 'Product created successfully.', 'data' => $product], 201);
         } catch (\Exception $e) {
@@ -2159,6 +2161,7 @@ public function getItemizedSalesReport(Request $request)
             'hsn_code' => 'sometimes|required|string|max:255',
             'price' => 'sometimes|required|numeric|min:0',
             'category_id' => 'nullable|exists:categories,id',
+            'art_category_id' => 'nullable|exists:product_category,id',
         ];
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
@@ -2171,6 +2174,7 @@ public function getItemizedSalesReport(Request $request)
             if ($request->has('hsn_code')) $product->hsn_code = $request->hsn_code;
             if ($request->has('price')) $product->price = $request->price;
             if ($request->has('category_id')) $product->category_id = $request->category_id;
+            if ($request->has('art_category_id')) $product->art_category_id = $request->art_category_id;
             if ($request->has('location_id')) $product->location_id = $request->location_id;
             if ($request->has('product_serial_number')) $product->product_serial_number = $request->product_serial_number;
             if ($request->has('item_code')) $product->item_code = $request->item_code;
@@ -2217,7 +2221,7 @@ public function getItemizedSalesReport(Request $request)
                 }
             }
 
-            $product->load(['category', 'images']);
+            $product->load(['category', 'artCategory', 'images']);
             return response()->json(['status' => true, 'message' => 'Product updated successfully.', 'data' => $product], 200);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'message' => 'Failed to update product.', 'error' => $e->getMessage()], 500);
@@ -2227,7 +2231,7 @@ public function getItemizedSalesReport(Request $request)
     public function getProductWithImages($id)
     {
         try {
-            $product = Product::with(['category', 'images'])->findOrFail($id);
+            $product = Product::with(['category', 'artCategory', 'images'])->findOrFail($id);
             return response()->json(['status' => true, 'message' => 'Product retrieved successfully.', 'data' => $product], 200);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'message' => 'Failed to retrieve product.', 'error' => $e->getMessage()], 500);
@@ -2251,7 +2255,7 @@ public function getItemizedSalesReport(Request $request)
             // Debug: Log the request parameters
             \Log::info('Filter request:', $request->all());
             
-            $query = Product::with(['category', 'images'])
+            $query = Product::with(['category', 'artCategory', 'images'])
                 ->where('business_id', $request->business_id)
                 ->where('location_id', $request->location_id);
                 // Temporarily removed ->where('is_temp', 0) to debug
@@ -2625,7 +2629,7 @@ public function getItemizedSalesReport(Request $request)
     public function getAllProductsWithImages(Request $request)
     {
         try {
-            $query = Product::with(['category', 'images'])
+            $query = Product::with(['category', 'artCategory', 'images'])
                 ->where('is_temp', 0);
 
             // Filter by business_id if provided
