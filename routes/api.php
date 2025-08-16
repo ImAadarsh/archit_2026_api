@@ -109,3 +109,6 @@ Route::get('/products/debug', [App\Http\Controllers\Admin::class, 'getAllProduct
 
 // Business details
 Route::get('/business/{id}', [App\Http\Controllers\Admin::class, 'getBusinessDetails']);
+
+// Get all products with images
+Route::get('/products/all', [App\Http\Controllers\Admin::class, 'getAllProductsWithImages']);

@@ -2511,4 +2511,47 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    public function getAllProductsWithImages(Request $request)
+    {
+        try {
+            $query = Product::with(['category', 'images'])
+                ->where('is_temp', 0);
+
+            // Filter by business_id if provided
+            if ($request->has('business_id') && !empty($request->business_id)) {
+                $query->where('business_id', $request->business_id);
+            }
+
+            // Filter by location_id if provided
+            if ($request->has('location_id') && !empty($request->location_id)) {
+                $query->where('location_id', $request->location_id);
+            }
+
+            // If neither business_id nor location_id is provided, return error
+            if (!$request->has('business_id') && !$request->has('location_id')) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Either business_id or location_id is required.'
+                ], 400);
+            }
+
+            // Get products with pagination
+            $perPage = $request->get('per_page', 20);
+            $products = $query->paginate($perPage);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Products retrieved successfully.',
+                'data' => $products
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve products.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
