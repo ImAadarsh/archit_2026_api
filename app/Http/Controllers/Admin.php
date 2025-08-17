@@ -1844,7 +1844,9 @@ public function getItemizedSalesReport(Request $request)
     {
         $rules = [
             'business_id' => 'required|exists:businessses,id',
+            'location_id' => 'required|exists:locations,id',
             'name' => 'required|string|max:255',
+            'hsn_code' => 'nullable|string|max:255',
             'image' => 'nullable', // base64 string
             'extension' => 'nullable|string|max:10',
         ];
@@ -1856,7 +1858,9 @@ public function getItemizedSalesReport(Request $request)
         try {
             $category = new \App\Models\Category();
             $category->business_id = $request->business_id;
+            $category->location_id = $request->location_id;
             $category->name = $request->name;
+            $category->hsn_code = $request->hsn_code;
 
             if ($request->has('image') && $request->image) {
                 $fileData = $request->image;
@@ -1879,15 +1883,21 @@ public function getItemizedSalesReport(Request $request)
     {
         $rules = [
             'business_id' => 'required|exists:businessses,id',
+            'location_id' => 'nullable|exists:locations,id',
         ];
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
         }
 
-        $categories = \App\Models\Category::where('business_id', $request->business_id)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = \App\Models\Category::where('business_id', $request->business_id);
+
+        // Filter by location_id if provided
+        if ($request->has('location_id') && $request->location_id) {
+            $query->where('location_id', $request->location_id);
+        }
+
+        $categories = $query->orderBy('created_at', 'desc')->get();
 
         return response()->json(['status' => true, 'message' => 'Categories retrieved successfully.', 'data' => $categories], 200);
     }
@@ -1897,6 +1907,8 @@ public function getItemizedSalesReport(Request $request)
         $rules = [
             'id' => 'required|exists:categories,id',
             'name' => 'sometimes|required|string|max:255',
+            'location_id' => 'sometimes|required|exists:locations,id',
+            'hsn_code' => 'nullable|string|max:255',
             'image' => 'nullable',
             'extension' => 'nullable|string|max:10',
         ];
@@ -1909,6 +1921,12 @@ public function getItemizedSalesReport(Request $request)
             $category = \App\Models\Category::findOrFail($request->id);
             if ($request->has('name')) {
                 $category->name = $request->name;
+            }
+            if ($request->has('location_id')) {
+                $category->location_id = $request->location_id;
+            }
+            if ($request->has('hsn_code')) {
+                $category->hsn_code = $request->hsn_code;
             }
             if ($request->has('image') && $request->image) {
                 $fileData = $request->image;
@@ -1966,6 +1984,7 @@ public function getItemizedSalesReport(Request $request)
     {
         $rules = [
             'business_id' => 'required|exists:businessses,id',
+            'location_id' => 'nullable|exists:locations,id',
             'category_id' => 'nullable|exists:categories,id',
         ];
         $validator = Validator::make($request->all(), $rules);
@@ -1976,6 +1995,11 @@ public function getItemizedSalesReport(Request $request)
         $query = \App\Models\ProductCategory::with('category')
             ->whereHas('category', function($query) use ($request) {
                 $query->where('business_id', $request->business_id);
+                
+                // Filter by location_id if provided
+                if ($request->has('location_id') && $request->location_id) {
+                    $query->where('location_id', $request->location_id);
+                }
             });
 
         // Filter by category_id if provided
@@ -2350,22 +2374,37 @@ public function getItemizedSalesReport(Request $request)
 
             // Get filter options for UI
             $filterOptions = [
-                'categories' => Category::where('business_id', $request->business_id)->get(['id', 'name']),
+                'categories' => Category::where('business_id', $request->business_id)
+                    ->where('location_id', $request->location_id)
+                    ->get(['id', 'name', 'hsn_code']),
                 'price_range' => [
-                    'min' => Product::where('business_id', $request->business_id)->min('price'),
-                    'max' => Product::where('business_id', $request->business_id)->max('price')
+                    'min' => Product::where('business_id', $request->business_id)
+                        ->where('location_id', $request->location_id)
+                        ->min('price'),
+                    'max' => Product::where('business_id', $request->business_id)
+                        ->where('location_id', $request->location_id)
+                        ->max('price')
                 ],
                 'size_range' => [
                     'height' => [
-                        'min' => Product::where('business_id', $request->business_id)->min('height'),
-                        'max' => Product::where('business_id', $request->business_id)->max('height')
+                        'min' => Product::where('business_id', $request->business_id)
+                            ->where('location_id', $request->location_id)
+                            ->min('height'),
+                        'max' => Product::where('business_id', $request->business_id)
+                            ->where('location_id', $request->location_id)
+                            ->max('height')
                     ],
                     'width' => [
-                        'min' => Product::where('business_id', $request->business_id)->min('width'),
-                        'max' => Product::where('business_id', $request->business_id)->max('width')
+                        'min' => Product::where('business_id', $request->business_id)
+                            ->where('location_id', $request->location_id)
+                            ->min('width'),
+                        'max' => Product::where('business_id', $request->business_id)
+                            ->where('location_id', $request->location_id)
+                            ->max('width')
                     ]
                 ],
                 'artists' => Product::where('business_id', $request->business_id)
+                    ->where('location_id', $request->location_id)
                     ->whereNotNull('artist_name')
                     ->distinct()
                     ->pluck('artist_name')

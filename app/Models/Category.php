@@ -11,13 +11,25 @@ class Category extends Model
 
     protected $fillable = [
         'business_id',
+        'location_id',
         'name',
+        'hsn_code',
         'image',
     ];
 
     public function products()
     {
         return $this->hasMany(Product::class);
+    }
+
+    public function productCategories()
+    {
+        return $this->hasMany(ProductCategory::class);
+    }
+
+    public function location()
+    {
+        return $this->belongsTo(Locations::class);
     }
 }
 
