@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use App\Services\RazorpayService;
+use App\Services\CashfreeService;
 
 class PlanController extends Controller
 {
@@ -37,7 +37,7 @@ class PlanController extends Controller
         return response()->json(['status' => true, 'data' => $plan]);
     }
 
-    public function store(Request $request, RazorpayService $rz)
+    public function store(Request $request, CashfreeService $cf)
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
@@ -63,27 +63,29 @@ class PlanController extends Controller
             $data['features_json'] = json_encode($lines);
         }
 
-        // Map to Razorpay supported period values
-        $periodMap = [
-            'day' => 'daily',
-            'week' => 'weekly',
-            'month' => 'monthly',
-            'year' => 'yearly',
+        // Map to Cashfree supported interval types
+        $intervalMap = [
+            'day' => 'DAY',
+            'week' => 'WEEK',
+            'month' => 'MONTH',
+            'year' => 'YEAR',
         ];
-        $razorpayPeriod = $periodMap[$data['interval_unit']];
+        $cashfreeInterval = $intervalMap[$data['interval_unit']];
 
         DB::beginTransaction();
         try {
-            $client = $rz->client();
-            $rpPlan = $client->plan->create([
-                'period' => $razorpayPeriod,
-                'interval' => $data['interval_count'],
-                'item' => [
-                    'name' => $data['name'],
-                    'amount' => $data['amount'],
-                    'currency' => $data['currency'] ?? 'INR',
-                ],
-                'notes' => [ 'code' => $data['code'], 'description' => $data['description'] ?? null ],
+            // Create plan in Cashfree
+            $cfPlan = $cf->createPlan([
+                'plan_id' => $data['code'],
+                'plan_name' => $data['name'],
+                'plan_type' => 'PERIODIC',
+                'plan_currency' => $data['currency'] ?? 'INR',
+                'plan_recurring_amount' => $data['amount'] / 100, // Convert from paise to rupees
+                'plan_max_amount' => $data['amount'] / 100,
+                'plan_max_cycles' => null,
+                'plan_intervals' => $data['interval_count'],
+                'plan_interval_type' => $cashfreeInterval,
+                'plan_note' => $data['description'] ?? null
             ]);
 
             $id = DB::table('subscription_plans')->insertGetId([
@@ -97,7 +99,8 @@ class PlanController extends Controller
                 'trial_days' => $data['trial_days'] ?? null,
                 'is_public' => (int)($data['is_public'] ?? 1),
                 'features_json' => $data['features_json'] ?? null,
-                'razorpay_plan_id' => $rpPlan['id'] ?? null,
+                'cashfree_plan_id' => $cfPlan['plan_id'] ?? $data['code'],
+                'payment_gateway' => 'cashfree',
                 'is_active' => 1,
                 'created_at' => now(),
                 'updated_at' => now(),

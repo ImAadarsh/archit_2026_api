@@ -1300,7 +1300,7 @@ public function getPurchaseSaleInvoice(Request $request){
     $pdf_query = http_build_query($pdf_params);
     
     $excel = "https://business.architartgallery.in/api/invoice-excel.php?" . $excel_query;
-    $pdf = "https://invoice.architartgallery.in/invoices.html?" . $pdf_query;    
+    $pdf = "https://invoice.invoicemate.in/invoices.html?" . $pdf_query;    
     return response([
         'status' => true,
         'total_amount' => $totalAmount,
@@ -1397,7 +1397,7 @@ public function getInvoiceListReport(Request $request)
     $totalTransactions = $invoices->count();
 
     $excel = "https://business.architartgallery.in/api/invoice-excel.php?" . http_build_query($request->all());
-    $pdf = "https://invoice.architartgallery.in/invoices.html?" . http_build_query($request->all());
+    $pdf = "https://invoice.invoicemate.in/invoices.html?" . http_build_query($request->all());
 
     return response([
         'status' => true,

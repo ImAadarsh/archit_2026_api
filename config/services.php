@@ -38,4 +38,12 @@ return [
         'mode' => env('RAZORPAY_MODE', 'test'),
     ],
 
+    'cashfree' => [
+        'client_id' => env('CASHFREE_CLIENT_ID'),
+        'client_secret' => env('CASHFREE_CLIENT_SECRET'),
+        'base_url' => env('CASHFREE_BASE_URL', 'https://api.cashfree.com/pg'),
+        'api_version' => env('CASHFREE_API_VERSION', '2023-08-01'),
+        'mode' => env('CASHFREE_MODE', 'production'),
+    ],
+
 ];
