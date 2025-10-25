@@ -505,7 +505,7 @@ public function addProduct(Request $request)
         DB::beginTransaction();
 
         $invoice = Invoice::findOrFail($request->invoice_id);
-        if ($request->product_id != null){
+        if (!empty($request->product_id) && $request->product_id !== null && $request->product_id !== "null"){
             // Add debugging to see what product_id is being passed
             \Log::info('Looking for product with ID: ' . $request->product_id);
             $product = Product::find($request->product_id);
@@ -515,7 +515,7 @@ public function addProduct(Request $request)
                     'message' => 'Product not found with ID: ' . $request->product_id
                 ], 404);
             }
-        }else if ($request->hsn_code){
+        }else if (!empty($request->hsn_code) && $request->hsn_code !== null && $request->hsn_code !== "null"){
             $product = $this->getOrCreateProduct($request->hsn_code, $request->name,$request->category_id,$request->quantity, $invoice);
         }else{
             return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
