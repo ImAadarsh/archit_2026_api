@@ -549,16 +549,12 @@ public function addProduct(Request $request)
 private function getOrCreateProduct($hsnCode, $name, $category_id, $quantity, $invoice)
 {
     return Product::create([
-        [
-            'hsn_code' => $hsnCode,
-            'business_id' => $invoice->business_id,
-            'location_id' => $invoice->location_id,
-            'category_id' => $category_id,
-            'quantity' => $quantity
-        ],
-        [
-            'name' => $name
-        ]
+        'hsn_code' => $hsnCode,
+        'name' => $name,
+        'business_id' => $invoice->business_id,
+        'location_id' => $invoice->location_id,
+        'category_id' => $category_id,
+        'quantity' => $quantity
     ]);
 }
 
