@@ -548,14 +548,16 @@ public function addProduct(Request $request)
 
 private function getOrCreateProduct($hsnCode, $name, $category_id, $quantity, $invoice)
 {
-    return Product::create([
-        'hsn_code' => $hsnCode,
-        'name' => $name,
-        'business_id' => $invoice->business_id,
-        'location_id' => $invoice->location_id,
-        'category_id' => $category_id,
-        'quantity' => $quantity
-    ]);
+    
+    $product = new Product();
+    $product->hsn_code = $hsnCode;
+    $product->name = $name;
+    $product->business_id = $invoice->business_id;
+    $product->location_id = $invoice->location_id;
+    $product->category_id = $category_id;
+    $product->quantity = $quantity;
+    $product->save();
+    return $product;
 }
 
 private function calculateItemPrice(Item $item, Invoice $invoice, $price, $isGst)
