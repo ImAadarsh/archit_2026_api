@@ -505,17 +505,27 @@ public function addProduct(Request $request)
         DB::beginTransaction();
 
         $invoice = Invoice::findOrFail($request->invoice_id);
-        $product = $this->getOrCreateProduct($request->hsn_code, $request->name, $invoice);
+        if ($request->product_id != null){
+            $product = Product::findOrFail($request->product_id);
+        }else if ($request->hsn_code){
+            $product = $this->getOrCreateProduct($request->hsn_code, $request->name,$request->category_id,$request->quantity, $invoice);
+        }else{
+            return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
+        }
         $address = Addres::where('invoice_id', $request->invoice_id)->first();
-
+        $business_location = Locations::findOrFail($invoice->location_id);
+        $state = $business_location->state;
         $item = new Item();
         $item->product_id = $product->id;
         $item->invoice_id = $request->invoice_id;
         $item->quantity = $request->quantity;
         $item->is_gst = $request->is_gst;
+        $item->gst_rate = $request->gst_percent;
+        $item->category_id = $request->category_id;
+
 
         $this->calculateItemPrice($item, $invoice, $request->price, $request->is_gst);
-        $this->calculateGST($item, $address, $invoice->type);
+        $this->calculateGST($item, $address,$state, $invoice->type);
 
         $item->price_of_all = $this->calculateTotalPrice($item);
         $item->save();
@@ -536,41 +546,49 @@ public function addProduct(Request $request)
     }
 }
 
-private function getOrCreateProduct($hsnCode, $name, $invoice)
+private function getOrCreateProduct($hsnCode, $name, $category_id, $quantity, $invoice)
 {
-    return Product::firstOrCreate(
+    return Product::create([
         [
             'hsn_code' => $hsnCode,
             'business_id' => $invoice->business_id,
-            'location_id' => $invoice->location_id
+            'location_id' => $invoice->location_id,
+            'category_id' => $category_id,
+            'quantity' => $quantity
         ],
         [
             'name' => $name
         ]
-    );
+    ]);
 }
 
 private function calculateItemPrice(Item $item, Invoice $invoice, $price, $isGst)
 {
     if ($invoice->type == 'normal' && $isGst) {
-        $item->price_of_one = round($price / 1.18, 2);
+        // Use dynamic GST rate instead of hardcoded 18%
+        $gstMultiplier = 1 + ($item->gst_rate / 100);
+        $item->price_of_one = round($price / $gstMultiplier, 2);
     } else {
         $item->price_of_one = $price;
     }
 }
 
-private function calculateGST(Item $item, ?Addres $address, $invoiceType)
+private function calculateGST(Item $item, ?Addres $address, $state, $invoiceType)
 {
     if ($invoiceType == 'normal') {
         $basePrice = $item->price_of_one * $item->quantity;
-        $isDelhi = $address && strtolower($address->state) == 'delhi';
+        $isDelhi = $address && strtolower($address->state) == strtolower($state);
+        
+        // Use the dynamic GST rate from the item
+        $gstRate = $item->gst_rate / 100; // Convert percentage to decimal
+        $cgstDgstRate = $gstRate / 2; // Split GST rate equally between CGST and DGST
 
         if ($isDelhi) {
-            $item->dgst = $item->cgst = round(0.09 * $basePrice, 2);
+            $item->dgst = $item->cgst = round($cgstDgstRate * $basePrice, 2);
             $item->igst = 0;
         } else {
             $item->dgst = $item->cgst = 0;
-            $item->igst = round(0.18 * $basePrice, 2);
+            $item->igst = round($gstRate * $basePrice, 2);
         }
     } else {
         $item->dgst = $item->cgst = $item->igst = 0;
