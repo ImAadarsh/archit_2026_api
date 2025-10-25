@@ -248,6 +248,7 @@ public function getDetailedInvoiceWeb($invoiceId)
                 'businessses.logo as business_logo',
                 'locations.location_name',
                 'locations.address as location_address',
+                'locations.state as location_state',
                 'locations.email as location_email',
                 'locations.phone as location_phone',
                 'locations.alternate_phone as location_alternate_phone'
