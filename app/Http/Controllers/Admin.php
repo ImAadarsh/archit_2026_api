@@ -506,7 +506,15 @@ public function addProduct(Request $request)
 
         $invoice = Invoice::findOrFail($request->invoice_id);
         if ($request->product_id != null){
-            $product = Product::findOrFail($request->product_id);
+            // Add debugging to see what product_id is being passed
+            \Log::info('Looking for product with ID: ' . $request->product_id);
+            $product = Product::find($request->product_id);
+            if (!$product) {
+                return response()->json([
+                    'status' => false, 
+                    'message' => 'Product not found with ID: ' . $request->product_id
+                ], 404);
+            }
         }else if ($request->hsn_code){
             $product = $this->getOrCreateProduct($request->hsn_code, $request->name,$request->category_id,$request->quantity, $invoice);
         }else{
