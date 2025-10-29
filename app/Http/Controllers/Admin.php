@@ -1212,8 +1212,8 @@ public function getExpenseReport(Request $request){
         
         $query_string = implode("&", $params);
         
-        $excel = "https://business.architartgallery.in/api/expense-excel.php?" . $query_string;
-        $pdf = "https://business.architartgallery.in/api/expense-pdf.php?" . $query_string;
+        $excel = "https://dashboard.invoicemate.in/api/expense-excel.php?" . $query_string;
+        $pdf = "https://dashboard.invoicemate.in/api/expense-pdf.php?" . $query_string;
     return response([
         'status' => true,
         'total_expense' => $totalAmount,
@@ -1324,7 +1324,7 @@ public function getPurchaseSaleInvoice(Request $request){
     unset($pdf_params['amount_max'], $pdf_params['amount_min'], $pdf_params['week_start'], $pdf_params['week_end']);
     $pdf_query = http_build_query($pdf_params);
     
-    $excel = "https://business.architartgallery.in/api/invoice-excel.php?" . $excel_query;
+    $excel = "https://dashboard.invoicemate.in/api/invoice-excel.php?" . $excel_query;
     $pdf = "https://invoice.invoicemate.in/invoices.html?" . $pdf_query;    
     return response([
         'status' => true,
@@ -1421,7 +1421,7 @@ public function getInvoiceListReport(Request $request)
     $totalgst = round($invoices->sum('total_igst') + $invoices->sum('total_cgst') + $invoices->sum('total_dgst'), 2);
     $totalTransactions = $invoices->count();
 
-    $excel = "https://business.architartgallery.in/api/invoice-excel.php?" . http_build_query($request->all());
+    $excel = "https://dashboard.invoicemate.in/api/invoice-excel.php?" . http_build_query($request->all());
     $pdf = "https://invoice.invoicemate.in/invoices.html?" . http_build_query($request->all());
 
     return response([
@@ -1701,6 +1701,11 @@ public function getItemizedSalesReport(Request $request)
             ->where('invoices.is_completed', 1)
             ->where('invoices.type', '=', 'normal');
 
+        // GST filter (default: all). If provided and not 'all', filter by exact GST rate
+        if ($request->has('gst_rate') && $request->gst_rate !== null && $request->gst_rate !== '' && strtolower((string) $request->gst_rate) !== 'all') {
+            $query->where('items.gst_rate', $request->gst_rate);
+        }
+
         // // Filter by price range
         // if ($request->has('price_min')) {
         //     $query->where('items.price_of_one', '>=', $request->price_min);
@@ -1744,9 +1749,10 @@ public function getItemizedSalesReport(Request $request)
         // Get the results
         $results = $query->select('products.name as product_name', 
                                   'items.price_of_one', 
+                                  'items.gst_rate',
                                   DB::raw('SUM(items.quantity) as total_quantity'), 
                                   DB::raw('SUM(items.price_of_all) as total_sales'))
-                         ->groupBy('products.name', 'items.product_id', 'items.price_of_one')
+                         ->groupBy('products.name', 'items.product_id', 'items.price_of_one', 'items.gst_rate')
                          ->orderBy('items.price_of_one')
                          ->get();
 
@@ -1762,6 +1768,7 @@ public function getItemizedSalesReport(Request $request)
                 return [
                     'product_name' => $item->product_name,
                     'price_per_item' => round($adjustedPrice, 2),
+                    'gst_percent' => $item->gst_rate,
                     'total_quantity' => $item->total_quantity,
                     'total_sales' => round($item->total_quantity * $adjustedPrice, 2)
                 ];
@@ -1771,13 +1778,14 @@ public function getItemizedSalesReport(Request $request)
                 return [
                     'product_name' => $item->product_name,
                     'price_per_item' => $item->price_of_one,
+                    'gst_percent' => $item->gst_rate,
                     'total_quantity' => $item->total_quantity,
                     'total_sales' => round($item->total_quantity * $item->price_of_one, 2)
                 ];
             });
         }
         $totalSales = $tableData->sum('total_sales');
-        $url = "https://business.architartgallery.in/api/itemised-excel.php?" . http_build_query($request->all());
+        $url = "https://dashboard.invoicemate.in/api/itemised-excel.php?" . http_build_query($request->all());
 
         return response()->json([
             'status' => true,
