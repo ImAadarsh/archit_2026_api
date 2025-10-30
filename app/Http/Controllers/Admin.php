@@ -1785,6 +1785,34 @@ public function getItemizedSalesReport(Request $request)
             });
         }
         $totalSales = $tableData->sum('total_sales');
+
+        // Include PERFORMA invoices in total to match getInvoiceListReport totals
+        // (Performa invoices generally have no GST, so ex-GST equals total_amount)
+        try {
+            $performaQuery = DB::table('invoices')
+                ->where('business_id', $request->business_id)
+                ->where('location_id', $request->location_id)
+                ->where('is_completed', 1)
+                ->where('type', 'performa');
+
+            if($request->has('day')){
+                $performaQuery->whereDate('invoice_date', $request->day);
+            }
+            if($request->has('month')){
+                $performaQuery->whereMonth('invoice_date', $request->month);
+            }
+            if($request->has('year')){
+                $performaQuery->whereYear('invoice_date', $request->year);
+            }
+            if($request->has('week_start')){
+                $performaQuery->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+            }
+
+            $performaTotal = (float) $performaQuery->sum('total_amount');
+            $totalSales += $performaTotal;
+        } catch (\Exception $e) {
+            // If anything goes wrong while summing performa totals, continue with item totals
+        }
         $url = "https://dashboard.invoicemate.in/api/itemised-excel.php?" . http_build_query($request->all());
 
         return response()->json([
