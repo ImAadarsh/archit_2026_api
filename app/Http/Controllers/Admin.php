@@ -1698,8 +1698,7 @@ public function getItemizedSalesReport(Request $request)
             ->join('invoices', 'items.invoice_id', '=', 'invoices.id')
             ->where('invoices.business_id', $request->business_id)
             ->where('invoices.location_id', $request->location_id)
-            ->where('invoices.is_completed', 1)
-            ->where('invoices.type', '=', 'normal');
+            ->where('invoices.is_completed', 1);
 
         // GST filter (default: all). If provided and not 'all', filter by exact GST rate
         if ($request->has('gst_rate') && $request->gst_rate !== null && $request->gst_rate !== '' && strtolower((string) $request->gst_rate) !== 'all') {
@@ -1786,29 +1785,31 @@ public function getItemizedSalesReport(Request $request)
         }
         $totalSales = $tableData->sum('total_sales');
 
-        // Include PERFORMA invoices in total to match getInvoiceListReport totals
-        // (Performa invoices generally have no GST, so ex-GST equals total_amount)
+        // Include PERFORMA invoices (that have no items) to match getInvoiceListReport totals
+        // If a PERFORMA invoice has items, those lines are already counted in $tableData
         try {
             $performaQuery = DB::table('invoices')
-                ->where('business_id', $request->business_id)
-                ->where('location_id', $request->location_id)
-                ->where('is_completed', 1)
-                ->where('type', 'performa');
+                ->leftJoin('items', 'items.invoice_id', '=', 'invoices.id')
+                ->where('invoices.business_id', $request->business_id)
+                ->where('invoices.location_id', $request->location_id)
+                ->where('invoices.is_completed', 1)
+                ->where('invoices.type', 'performa')
+                ->whereNull('items.id');
 
             if($request->has('day')){
-                $performaQuery->whereDate('invoice_date', $request->day);
+                $performaQuery->whereDate('invoices.invoice_date', $request->day);
             }
             if($request->has('month')){
-                $performaQuery->whereMonth('invoice_date', $request->month);
+                $performaQuery->whereMonth('invoices.invoice_date', $request->month);
             }
             if($request->has('year')){
-                $performaQuery->whereYear('invoice_date', $request->year);
+                $performaQuery->whereYear('invoices.invoice_date', $request->year);
             }
             if($request->has('week_start')){
-                $performaQuery->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+                $performaQuery->whereBetween('invoices.invoice_date', [$request->week_start, $request->week_end]);
             }
 
-            $performaTotal = (float) $performaQuery->sum('total_amount');
+            $performaTotal = (float) $performaQuery->sum('invoices.total_amount');
             $totalSales += $performaTotal;
         } catch (\Exception $e) {
             // If anything goes wrong while summing performa totals, continue with item totals
