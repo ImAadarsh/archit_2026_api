@@ -1519,8 +1519,10 @@ public function dashboardReport(Request $request)
     $totalExcludingGst = round($purchaseSales->sum('total_amount') - $totalGst, 2);
 
     // Get Invoice Report (Item Purchases)
-    $itemQuery = Item::query()->where('business_id',$request->business_id)->where('location_id',$request->location_id)
+    $itemQuery = Item::query()
         ->join('invoices', 'items.invoice_id', '=', 'invoices.id')
+        ->where('invoices.business_id',$request->business_id)
+        ->where('invoices.location_id',$request->location_id)
         ->where('invoices.is_completed', 1)
         ->where('invoices.type', 'normal');
     $applyDateFilters($itemQuery);
@@ -1547,7 +1549,7 @@ public function dashboardReport(Request $request)
 
     // Prepare response data
     $data = [
-        'actual_sale_amount' => round(($actualSaleAmount-$totalGst),2),
+        'actual_sale_amount' => $actualSaleAmount,
         'total_excluding_gst' => $totalExcludingGst,
         'total_expense' => $totalAmount,
         'total_gst' => $totalGst,
