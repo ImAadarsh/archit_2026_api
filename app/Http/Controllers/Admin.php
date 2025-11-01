@@ -2497,12 +2497,12 @@ public function getItemizedSalesReport(Request $request)
     public function getBusinessSubscriptionPlan($business_id)
     {
         try {
-            // Find the active subscription for the business
+            // Find the active or trialing subscription for the business
             $subscription = \DB::table('subscriptions')
                 ->join('subscription_plans', 'subscriptions.plan_id', '=', 'subscription_plans.id')
                 ->where('subscriptions.business_id', $business_id)
-                ->where('subscriptions.status', 'active')
-                ->select('subscription_plans.code', 'subscriptions.trial_ends_at')
+                ->whereIn('subscriptions.status', ['active', 'trialing'])
+                ->select('subscription_plans.code', 'subscriptions.trial_ends_at', 'subscriptions.status')
                 ->first();
             
             if (!$subscription) {
@@ -2515,12 +2515,19 @@ public function getItemizedSalesReport(Request $request)
 
             // Check if the business is in trial period
             $code = $subscription->code;
-            if (!empty($subscription->trial_ends_at)) {
-                $trialEndsAt = \Carbon\Carbon::parse($subscription->trial_ends_at);
-                $now = \Carbon\Carbon::now();
-                
-                // If trial period has not ended yet
-                if ($trialEndsAt->greaterThan($now)) {
+            
+            // If status is 'trialing' or trial_ends_at is in the future
+            if ($subscription->status === 'trialing' || !empty($subscription->trial_ends_at)) {
+                if (!empty($subscription->trial_ends_at)) {
+                    $trialEndsAt = \Carbon\Carbon::parse($subscription->trial_ends_at);
+                    $now = \Carbon\Carbon::now();
+                    
+                    // If trial period has not ended yet
+                    if ($trialEndsAt->greaterThan($now)) {
+                        $code = 'FREE_TRIAL';
+                    }
+                } else if ($subscription->status === 'trialing') {
+                    // If status is trialing but no trial_ends_at date
                     $code = 'FREE_TRIAL';
                 }
             }
