@@ -2158,6 +2158,7 @@ public function getItemizedSalesReport(Request $request)
             'price' => 'required|numeric|min:0',
             'category_id' => 'nullable|exists:categories,id',
             'art_category_id' => 'nullable|exists:product_category,id',
+            'orientation' => 'nullable|string|max:255',
         ];
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
@@ -2182,6 +2183,7 @@ public function getItemizedSalesReport(Request $request)
             $product->artist_name = $request->artist_name;
             $product->quantity = $request->quantity;
             $product->is_temp = 0;
+            $product->orientation = $request->orientation;
             $product->save();
 
             // Handle multiple images from multipart form data
@@ -2262,6 +2264,7 @@ public function getItemizedSalesReport(Request $request)
             'price' => 'sometimes|required|numeric|min:0',
             'category_id' => 'nullable|exists:categories,id',
             'art_category_id' => 'nullable|exists:product_category,id',
+            'orientation' => 'nullable|string|max:255',
         ];
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
@@ -2284,6 +2287,7 @@ public function getItemizedSalesReport(Request $request)
             if ($request->has('is_include_gst')) $product->is_include_gst = $request->is_include_gst;
             if ($request->has('artist_name')) $product->artist_name = $request->artist_name;
             if ($request->has('quantity')) $product->quantity = $request->quantity;
+            if ($request->has('orientation')) $product->orientation = $request->orientation;
             $product->save();
 
             // Handle image deletions
