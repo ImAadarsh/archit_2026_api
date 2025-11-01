@@ -2493,6 +2493,40 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    // Get subscription plan code by business ID
+    public function getBusinessSubscriptionPlan($business_id)
+    {
+        try {
+            // Find the active subscription for the business
+            $subscription = \DB::table('subscriptions')
+                ->join('subscription_plans', 'subscriptions.plan_id', '=', 'subscription_plans.id')
+                ->where('subscriptions.business_id', $business_id)
+                ->where('subscriptions.status', 'active')
+                ->select('subscription_plans.code')
+                ->first();
+            
+            if (!$subscription) {
+                return response()->json([
+                    'status' => false, 
+                    'message' => 'No active subscription found for this business.',
+                    'code' => null
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true, 
+                'message' => 'Subscription plan retrieved successfully.',
+                'code' => $subscription->code
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false, 
+                'message' => 'Failed to retrieve subscription plan.', 
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // Product Dashboard and User Inquiry APIs
     public function getFilteredProducts(Request $request)
     {

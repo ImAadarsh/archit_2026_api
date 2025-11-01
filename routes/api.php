@@ -110,6 +110,9 @@ Route::delete('/products/{id}', 'App\\Http\\Controllers\\Admin@deleteProduct');
 Route::post('/products/images/delete', 'App\\Http\\Controllers\\Admin@deleteProductImage');
 Route::post('/products/images/add', 'App\\Http\\Controllers\\Admin@addProductImages');
 
+// Subscription Plan
+Route::get('/business/{business_id}/subscription-plan', 'App\\Http\\Controllers\\Admin@getBusinessSubscriptionPlan');
+
 // Product Dashboard and User Inquiry Routes
 Route::post('/products/filter', [App\Http\Controllers\Admin::class, 'getFilteredProducts']);
 Route::post('/inquiries/submit', [App\Http\Controllers\Admin::class, 'submitUserInquiry']);
