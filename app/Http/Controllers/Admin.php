@@ -185,7 +185,8 @@ private function getNextSerialNumber($type, $location_id)
                 // Filter by week
                 if($request->has('week_start')){
                     // Assuming the week is passed as an array with start and end dates
-                    $query->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+                    $query->whereDate('invoice_date', '>=', $request->week_start)
+                          ->whereDate('invoice_date', '<=', $request->week_end);
                 }
         
                 // Filter by year
@@ -316,7 +317,8 @@ public function getBulkInvoicesWeb(Request $request)
 
         // Apply date range filter if provided
         if ($request->has('start_date') && $request->has('end_date')) {
-            $query->whereBetween('invoices.invoice_date', [$request->start_date, $request->end_date]);
+            $query->whereDate('invoices.invoice_date', '>=', $request->start_date)
+                  ->whereDate('invoices.invoice_date', '<=', $request->end_date);
         }
 
         // Apply min amount filter if provided
@@ -1080,7 +1082,8 @@ public function getSaleReport(Request $request){
     // Filter by week
     if($request->has('week_start')){
         // Assuming the week is passed as an array with start and end dates
-        $query->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+        $query->whereDate('invoice_date', '>=', $request->week_start)
+              ->whereDate('invoice_date', '<=', $request->week_end);
     }
 
     // Filter by year
@@ -1241,7 +1244,8 @@ public function getPurchaseSaleInvoice(Request $request){
     // Filter by week
     if($request->has('week_start')){
         // Assuming the week is passed as an array with start and end dates
-        $query->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+        $query->whereDate('invoice_date', '>=', $request->week_start)
+              ->whereDate('invoice_date', '<=', $request->week_end);
     }
 
     // Filter by year
@@ -1354,7 +1358,8 @@ public function getInvoiceListReport(Request $request)
 
     // Filter by week
     if ($request->has('week_start') && $request->has('week_end')) {
-        $query->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+        $query->whereDate('invoice_date', '>=', $request->week_start)
+              ->whereDate('invoice_date', '<=', $request->week_end);
     }
 
     // Filter by year
@@ -1496,7 +1501,8 @@ public function dashboardReport(Request $request)
             $query->whereMonth('invoice_date', $request->month);
         }
         if ($request->has('week_start') && $request->has('week_end')) {
-            $query->whereBetween('invoice_date', [$request->week_start, $request->week_end]);
+            $query->whereDate('invoice_date', '>=', $request->week_start)
+                  ->whereDate('invoice_date', '<=', $request->week_end);
         }
         if ($request->has('year')) {
             $query->whereYear('invoice_date', $request->year);
@@ -1574,7 +1580,8 @@ public function getBulkInvoices(Request $request)
 
         // Apply date range filter if provided
         if ($request->has('start_date') && $request->has('end_date')) {
-            $query->whereBetween('invoice_date', [$request->start_date, $request->end_date]);
+            $query->whereDate('invoice_date', '>=', $request->start_date)
+                  ->whereDate('invoice_date', '<=', $request->end_date);
         }
 
         // Apply min amount filter if provided
@@ -1740,7 +1747,8 @@ public function getItemizedSalesReport(Request $request)
             // Filter by week
             if($request->has('week_start')){
                 // Assuming the week is passed as an array with start and end dates
-                $query->whereBetween('invoices.invoice_date', [$request->week_start, $request->week_end]);
+                $query->whereDate('invoices.invoice_date', '>=', $request->week_start)
+                      ->whereDate('invoices.invoice_date', '<=', $request->week_end);
             }
 
                         // Filter by amount range
@@ -1812,7 +1820,8 @@ public function getItemizedSalesReport(Request $request)
                 $performaQuery->whereYear('invoices.invoice_date', $request->year);
             }
             if($request->has('week_start')){
-                $performaQuery->whereBetween('invoices.invoice_date', [$request->week_start, $request->week_end]);
+                $performaQuery->whereDate('invoices.invoice_date', '>=', $request->week_start)
+                              ->whereDate('invoices.invoice_date', '<=', $request->week_end);
             }
 
             $performaTotal = (float) $performaQuery->sum('invoices.total_amount');
