@@ -2342,6 +2342,157 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    // Delete product image by image id and product id
+    public function deleteProductImage(Request $request)
+    {
+        $rules = [
+            'image_id' => 'required|exists:product_images,id',
+            'product_id' => 'required|exists:products,id',
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            // Find the image that belongs to the specified product
+            $productImage = \App\Models\ProductImage::where('id', $request->image_id)
+                ->where('product_id', $request->product_id)
+                ->first();
+            
+            if (!$productImage) {
+                return response()->json([
+                    'status' => false, 
+                    'message' => 'Image not found or does not belong to this product.'
+                ], 404);
+            }
+
+            // Delete the file from storage if it exists
+            if (\Storage::exists($productImage->image)) {
+                \Storage::delete($productImage->image);
+            }
+
+            // Delete the database record
+            $productImage->delete();
+
+            return response()->json([
+                'status' => true, 
+                'message' => 'Product image deleted successfully.'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false, 
+                'message' => 'Failed to delete product image.', 
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Add images to a product (can be multiple)
+    public function addProductImages(Request $request)
+    {
+        $rules = [
+            'product_id' => 'required|exists:products,id',
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $product = Product::findOrFail($request->product_id);
+            $uploadedImages = [];
+
+            // Handle multiple images from multipart form data
+            $uploadedFiles = $request->allFiles();
+            
+            // Method 1: Check if 'images' field exists (single file or array)
+            if (isset($uploadedFiles['images'])) {
+                $images = $uploadedFiles['images'];
+                
+                if (is_array($images)) {
+                    foreach ($images as $index => $file) {
+                        if ($file && $file->isValid()) {
+                            $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                            $filePath = $file->storeAs('public/product_images', $fileName);
+                            
+                            $productImage = \App\Models\ProductImage::create([
+                                'product_id' => $product->id,
+                                'image' => $filePath,
+                            ]);
+                            
+                            $uploadedImages[] = $productImage;
+                        }
+                    }
+                } else {
+                    $file = $images;
+                    if ($file && $file->isValid()) {
+                        $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                        $filePath = $file->storeAs('public/product_images', $fileName);
+                        
+                        $productImage = \App\Models\ProductImage::create([
+                            'product_id' => $product->id,
+                            'image' => $filePath,
+                        ]);
+                        
+                        $uploadedImages[] = $productImage;
+                    }
+                }
+            }
+            // Method 2: Check for individual indexed files (images[0], images[1], etc.)
+            else {
+                $allInputs = $request->all();
+                foreach ($allInputs as $key => $value) {
+                    if (preg_match('/^images\[(\d+)\]$/', $key, $matches)) {
+                        $index = $matches[1];
+                        
+                        // Try to get the file using the raw key
+                        $file = null;
+                        
+                        if (isset($uploadedFiles[$key])) {
+                            $file = $uploadedFiles[$key];
+                        } else if ($request->hasFile($key)) {
+                            $file = $request->file($key);
+                        }
+                        
+                        if ($file && $file->isValid()) {
+                            $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                            $filePath = $file->storeAs('public/product_images', $fileName);
+                            
+                            $productImage = \App\Models\ProductImage::create([
+                                'product_id' => $product->id,
+                                'image' => $filePath,
+                            ]);
+                            
+                            $uploadedImages[] = $productImage;
+                        }
+                    }
+                }
+            }
+
+            if (empty($uploadedImages)) {
+                return response()->json([
+                    'status' => false, 
+                    'message' => 'No valid images were uploaded.'
+                ], 400);
+            }
+
+            return response()->json([
+                'status' => true, 
+                'message' => count($uploadedImages) . ' image(s) added successfully.',
+                'data' => $uploadedImages
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false, 
+                'message' => 'Failed to add product images.', 
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // Product Dashboard and User Inquiry APIs
     public function getFilteredProducts(Request $request)
     {

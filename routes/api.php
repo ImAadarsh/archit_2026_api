@@ -106,6 +106,10 @@ Route::post('/products/update', 'App\\Http\\Controllers\\Admin@updateProductWith
 Route::get('/products/{id}', 'App\\Http\\Controllers\\Admin@getProductWithImages');
 Route::delete('/products/{id}', 'App\\Http\\Controllers\\Admin@deleteProduct');
 
+// Product Images Management
+Route::post('/products/images/delete', 'App\\Http\\Controllers\\Admin@deleteProductImage');
+Route::post('/products/images/add', 'App\\Http\\Controllers\\Admin@addProductImages');
+
 // Product Dashboard and User Inquiry Routes
 Route::post('/products/filter', [App\Http\Controllers\Admin::class, 'getFilteredProducts']);
 Route::post('/inquiries/submit', [App\Http\Controllers\Admin::class, 'submitUserInquiry']);
