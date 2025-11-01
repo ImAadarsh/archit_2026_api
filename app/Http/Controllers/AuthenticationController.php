@@ -96,6 +96,11 @@ class AuthenticationController extends Controller
                 
                 // Add logo to user object
                 $user->logo = $logo;
+                if ($request->role == 'superadmin') {
+                    if ($user->role != 'superadmin') {
+                    return response(["status" => "failed", "message" => "You are not authorized to access this resource."], 401);
+                }
+            }
                 
                 $response = [
                     'status' => true,
