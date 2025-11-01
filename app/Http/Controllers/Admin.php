@@ -2502,7 +2502,7 @@ public function getItemizedSalesReport(Request $request)
                 ->join('subscription_plans', 'subscriptions.plan_id', '=', 'subscription_plans.id')
                 ->where('subscriptions.business_id', $business_id)
                 ->where('subscriptions.status', 'active')
-                ->select('subscription_plans.code')
+                ->select('subscription_plans.code', 'subscriptions.trial_ends_at')
                 ->first();
             
             if (!$subscription) {
@@ -2513,10 +2513,22 @@ public function getItemizedSalesReport(Request $request)
                 ], 404);
             }
 
+            // Check if the business is in trial period
+            $code = $subscription->code;
+            if (!empty($subscription->trial_ends_at)) {
+                $trialEndsAt = \Carbon\Carbon::parse($subscription->trial_ends_at);
+                $now = \Carbon\Carbon::now();
+                
+                // If trial period has not ended yet
+                if ($trialEndsAt->greaterThan($now)) {
+                    $code = 'FREE_TRIAL';
+                }
+            }
+
             return response()->json([
                 'status' => true, 
                 'message' => 'Subscription plan retrieved successfully.',
-                'code' => $subscription->code
+                'code' => $code
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
