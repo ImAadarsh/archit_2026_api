@@ -268,7 +268,7 @@ public function getDetailedInvoiceWeb($invoiceId)
 
         // Prepare business and location info
         $businessInfo = [
-            'name' => $invoice->business_name ?? 'Archit Art Gallery',
+            'name' => $invoice->business_name ?? 'InvoiceMate',
             'address' => $invoice->location_address ?? 'Shop No: 28 Kirti Nagar Furniture Block, Kirti Nagar, New Delhi – 110015',
             'phone' => $invoice->location_phone ?? '+91- 9868 200 002',
             'alternate_phone' => $invoice->location_alternate_phone ?? '+91- 9289 388 374',
@@ -360,7 +360,7 @@ public function getBulkInvoicesWeb(Request $request)
         // Process each invoice to add business_info
         $processedInvoices = $invoices->map(function ($invoice) {
             $invoice->business_info = [
-                'name' => $invoice->location_name ?? 'Archit Art Gallery',
+                'name' => $invoice->location_name ?? 'InvoiceMate',
                 'address' => $invoice->location_address ?? 'Shop No: 28 Kirti Nagar Furniture Block, Kirti Nagar, New Delhi – 110015',
                 'phone' => $invoice->location_phone ?? '+91- 9868 200 002',
                 'alternate_phone' => $invoice->location_alternate_phone ?? '+91- 9289 388 374',
@@ -1642,6 +1642,7 @@ public function getBulkInvoicesSelected(Request $request)
                 'locations.address as location_address',
                 'locations.email as location_email',
                 'locations.phone as location_phone',
+                'locations.state as location_state',
                 'locations.alternate_phone as location_alternate_phone'
             )
             ->where('invoices.is_completed', 1);
@@ -1661,11 +1662,12 @@ public function getBulkInvoicesSelected(Request $request)
         // Process each invoice to add business_info
         $processedInvoices = $invoices->map(function ($invoice) {
             $invoice->business_info = [
-                'name' => $invoice->location_name ?? 'Archit Art Gallery',
-                'address' => $invoice->location_address ?? 'Shop No: 28 Kirti Nagar Furniture Block, Kirti Nagar, New Delhi – 110015',
-                'phone' => $invoice->location_phone ?? '+91- 9868 200 002',
-                'alternate_phone' => $invoice->location_alternate_phone ?? '+91- 9289 388 374',
-                'gst' => $invoice->business_gst ?? '07AADPA2039E1ZF'
+                'name' => $invoice->location_name ?? 'InvoiceMate',
+                'address' => $invoice->location_address ?? 'Business Address Not Found',
+                'phone' => $invoice->location_phone ?? 'Business Phone Not Found',
+                'alternate_phone' => $invoice->location_alternate_phone ?? 'Business Alternate Phone Not Found',
+                'gst' => $invoice->business_gst ?? 'Business GST Not Found',
+                'state' => $invoice->location_state ?? 'Business State Not Found',
             ];
             
             // Remove the additional fields from the main invoice object
