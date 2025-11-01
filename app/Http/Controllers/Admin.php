@@ -1638,6 +1638,7 @@ public function getBulkInvoicesSelected(Request $request)
             ->select(
                 'invoices.*',
                 'businessses.gst as business_gst',
+                'businessses.logo as business_logo',
                 'locations.location_name',
                 'locations.address as location_address',
                 'locations.email as location_email',
@@ -1668,6 +1669,7 @@ public function getBulkInvoicesSelected(Request $request)
                 'alternate_phone' => $invoice->location_alternate_phone ?? 'Business Alternate Phone Not Found',
                 'gst' => $invoice->business_gst ?? 'Business GST Not Found',
                 'state' => $invoice->location_state ?? 'Business State Not Found',
+                'business_logo' => $invoice->business_logo ?? 'Business Logo Not Found',
             ];
             
             // Remove the additional fields from the main invoice object
