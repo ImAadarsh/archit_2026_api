@@ -24,7 +24,6 @@ class Admin extends Controller
     {
         $rules = [
             'business_name' => 'required',
-            'gst' => 'required',
             'email' => 'required|email',
             'phone' => 'required',
             'alternate_phone' => 'nullable',
