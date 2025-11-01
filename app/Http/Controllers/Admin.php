@@ -2022,7 +2022,7 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
-    // Product Category (Art Category) CRUD
+    // Product Category (Product Category) CRUD
     public function createProductCategory(Request $request)
     {
         $rules = [
@@ -2042,9 +2042,9 @@ public function getItemizedSalesReport(Request $request)
 
             $productCategory->load('category');
 
-            return response()->json(['status' => true, 'message' => 'Art Category created successfully.', 'data' => $productCategory], 201);
+            return response()->json(['status' => true, 'message' => 'Product Category created successfully.', 'data' => $productCategory], 201);
         } catch (\Exception $e) {
-            return response()->json(['status' => false, 'message' => 'Failed to create art category.', 'error' => $e->getMessage()], 500);
+            return response()->json(['status' => false, 'message' => 'Failed to create Product Category.', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -2077,7 +2077,7 @@ public function getItemizedSalesReport(Request $request)
 
         $productCategories = $query->orderBy('created_at', 'desc')->get();
 
-        return response()->json(['status' => true, 'message' => 'Art Categories retrieved successfully.', 'data' => $productCategories], 200);
+        return response()->json(['status' => true, 'message' => 'Product Categories retrieved successfully.', 'data' => $productCategories], 200);
     }
 
     public function updateProductCategory(Request $request)
@@ -2104,9 +2104,9 @@ public function getItemizedSalesReport(Request $request)
 
             $productCategory->load('category');
 
-            return response()->json(['status' => true, 'message' => 'Art Category updated successfully.', 'data' => $productCategory], 200);
+            return response()->json(['status' => true, 'message' => 'Product Category updated successfully.', 'data' => $productCategory], 200);
         } catch (\Exception $e) {
-            return response()->json(['status' => false, 'message' => 'Failed to update art category.', 'error' => $e->getMessage()], 500);
+            return response()->json(['status' => false, 'message' => 'Failed to update Product Category.', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -2115,9 +2115,9 @@ public function getItemizedSalesReport(Request $request)
         try {
             $productCategory = \App\Models\ProductCategory::findOrFail($id);
             $productCategory->delete();
-            return response()->json(['status' => true, 'message' => 'Art Category deleted successfully.'], 200);
+            return response()->json(['status' => true, 'message' => 'Product Category deleted successfully.'], 200);
         } catch (\Exception $e) {
-            return response()->json(['status' => false, 'message' => 'Failed to delete art category.', 'error' => $e->getMessage()], 500);
+            return response()->json(['status' => false, 'message' => 'Failed to delete Product Category.', 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -2136,7 +2136,7 @@ public function getItemizedSalesReport(Request $request)
             ->orderBy('name', 'asc')
             ->get();
 
-        return response()->json(['status' => true, 'message' => 'Art Categories retrieved successfully.', 'data' => $productCategories], 200);
+        return response()->json(['status' => true, 'message' => 'Product Categories retrieved successfully.', 'data' => $productCategories], 200);
     }
 
     // Product CRUD with multiple images
@@ -2771,6 +2771,56 @@ public function getItemizedSalesReport(Request $request)
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve products.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function uploadBusinessLogo(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|image|mimes:jpeg,png,jpg,gif,webp,svg|max:5120', // 5MB max
+                'business_id' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            if ($request->hasFile('file')) {
+                $file = $request->file('file');
+                $business_id = $request->business_id;
+                $extension = $file->getClientOriginalExtension();
+                $filename = 'business_' . $business_id . '_' . time() . '.' . $extension;
+                
+                // Store in public/business_logos directory
+                $path = $file->storeAs('public/business_logos', $filename);
+                
+                // Return the relative path to be stored in database
+                $relativePath = 'public/business_logos/' . $filename;
+                
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Logo uploaded successfully',
+                    'path' => $relativePath,
+                    'filename' => $filename
+                ], 200);
+            }
+
+            return response()->json([
+                'status' => false,
+                'message' => 'No file uploaded'
+            ], 400);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to upload logo',
                 'error' => $e->getMessage()
             ], 500);
         }

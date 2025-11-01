@@ -27,6 +27,7 @@ Route::post("/updateprofile",'App\Http\Controllers\AuthenticationController@upda
 // Admin API's
 Route::post("/insertBusiness",'App\Http\Controllers\Admin@insertBusiness');
 Route::post("/insertLocation",'App\Http\Controllers\Admin@insertLocation');
+Route::post("/upload-business-logo",'App\Http\Controllers\Admin@uploadBusinessLogo');
 
 // SaaS Plans & Billing
 Route::get('/public/plans', 'App\\Http\\Controllers\\PlanController@publicIndex');
@@ -92,7 +93,7 @@ Route::get('/categories', 'App\\Http\\Controllers\\Admin@listCategories');
 Route::post('/categories/update', 'App\\Http\\Controllers\\Admin@updateCategory');
 Route::delete('/categories/{id}', 'App\\Http\\Controllers\\Admin@deleteCategory');
 
-// Product Categories (Art Categories)
+// Product Categories (Product Categories)
 Route::post('/product-categories', 'App\\Http\\Controllers\\Admin@createProductCategory');
 Route::get('/product-categories', 'App\\Http\\Controllers\\Admin@listProductCategories');
 Route::get('/product-categories/by-category', 'App\\Http\\Controllers\\Admin@getProductCategoriesByCategory');
