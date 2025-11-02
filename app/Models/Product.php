@@ -23,9 +23,11 @@ class Product extends Model
         'width',
         'is_framed',
         'is_include_gst',
+        'is_customizable',
         'artist_name',
         'quantity',
         'is_temp',
+        'orientation',
     ];
 
     public function category()

@@ -2180,6 +2180,7 @@ public function getItemizedSalesReport(Request $request)
             $product->width = $request->width;
             $product->is_framed = $request->is_framed ?? 0;
             $product->is_include_gst = $request->is_include_gst ?? 0;
+            $product->is_customizable = $request->is_customizable ?? 0;
             $product->artist_name = $request->artist_name;
             $product->quantity = $request->quantity;
             $product->is_temp = 0;
@@ -2285,6 +2286,7 @@ public function getItemizedSalesReport(Request $request)
             if ($request->has('width')) $product->width = $request->width;
             if ($request->has('is_framed')) $product->is_framed = $request->is_framed;
             if ($request->has('is_include_gst')) $product->is_include_gst = $request->is_include_gst;
+            if ($request->has('is_customizable')) $product->is_customizable = $request->is_customizable;
             if ($request->has('artist_name')) $product->artist_name = $request->artist_name;
             if ($request->has('quantity')) $product->quantity = $request->quantity;
             if ($request->has('orientation')) $product->orientation = $request->orientation;
