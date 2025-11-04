@@ -12,6 +12,8 @@ class ProductImage extends Model
     protected $fillable = [
         'product_id',
         'image',
+        'is_mockup',
+        'mockup_description',
     ];
 
     public function product()

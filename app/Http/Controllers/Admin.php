@@ -2406,6 +2406,10 @@ public function getItemizedSalesReport(Request $request)
         try {
             $product = Product::findOrFail($request->product_id);
             $uploadedImages = [];
+            $product->name = $request->name;
+            $product->description = $request->description;
+            $product->suitable_for = $request->suitable_for;
+            $product->save();
 
             // Handle multiple images from multipart form data
             $uploadedFiles = $request->allFiles();
@@ -2420,10 +2424,18 @@ public function getItemizedSalesReport(Request $request)
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
                             
-                            $productImage = \App\Models\ProductImage::create([
+                            $imageData = [
                                 'product_id' => $product->id,
                                 'image' => $filePath,
-                            ]);
+                            ];
+                            
+                            // Add mockup data if is_mockup is set to 1
+                            if ($request->is_mockup == 1) {
+                                $imageData['is_mockup'] = 1;
+                                $imageData['mockup_description'] = $request->mockup_description ?? '';
+                            }
+                            
+                            $productImage = \App\Models\ProductImage::create($imageData);
                             
                             $uploadedImages[] = $productImage;
                         }
@@ -2434,10 +2446,18 @@ public function getItemizedSalesReport(Request $request)
                         $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                         $filePath = $file->storeAs('public/product_images', $fileName);
                         
-                        $productImage = \App\Models\ProductImage::create([
+                        $imageData = [
                             'product_id' => $product->id,
                             'image' => $filePath,
-                        ]);
+                        ];
+                        
+                        // Add mockup data if is_mockup is set to 1
+                        if ($request->is_mockup == 1) {
+                            $imageData['is_mockup'] = 1;
+                            $imageData['mockup_description'] = $request->mockup_description ?? '';
+                        }
+                        
+                        $productImage = \App\Models\ProductImage::create($imageData);
                         
                         $uploadedImages[] = $productImage;
                     }
@@ -2463,10 +2483,18 @@ public function getItemizedSalesReport(Request $request)
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
                             
-                            $productImage = \App\Models\ProductImage::create([
+                            $imageData = [
                                 'product_id' => $product->id,
                                 'image' => $filePath,
-                            ]);
+                            ];
+                            
+                            // Add mockup data if is_mockup is set to 1
+                            if ($request->is_mockup == 1) {
+                                $imageData['is_mockup'] = 1;
+                                $imageData['mockup_description'] = $request->mockup_description ?? '';
+                            }
+                            
+                            $productImage = \App\Models\ProductImage::create($imageData);
                             
                             $uploadedImages[] = $productImage;
                         }
