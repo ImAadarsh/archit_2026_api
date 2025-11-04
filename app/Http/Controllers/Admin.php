@@ -2185,6 +2185,7 @@ public function getItemizedSalesReport(Request $request)
             $product->quantity = $request->quantity;
             $product->is_temp = 0;
             $product->orientation = $request->orientation;
+            $product->description = $request->description;
             $product->save();
 
             // Handle multiple images from multipart form data
@@ -2290,6 +2291,7 @@ public function getItemizedSalesReport(Request $request)
             if ($request->has('artist_name')) $product->artist_name = $request->artist_name;
             if ($request->has('quantity')) $product->quantity = $request->quantity;
             if ($request->has('orientation')) $product->orientation = $request->orientation;
+            if ($request->has('description')) $product->description = $request->description;
             $product->save();
 
             // Handle image deletions
