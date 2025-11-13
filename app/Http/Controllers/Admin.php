@@ -516,10 +516,12 @@ public function addProduct(Request $request)
                     'message' => 'Product not found with ID: ' . $request->product_id
                 ], 404);
             }
-        }else if (!empty($request->hsn_code) && $request->hsn_code !== null && $request->hsn_code !== "null"){
-            $product = $this->getOrCreateProduct($request->hsn_code, $request->name,$request->category_id,$request->quantity, $invoice);
-        }else{
-            return response()->json(['status' => false, 'message' => 'Product not found.'], 404);
+        } else {
+            if (empty($request->name)) {
+                return response()->json(['status' => false, 'message' => 'Product name is required when product_id is not provided.'], 422);
+            }
+            $hsnCode = (!empty($request->hsn_code) && $request->hsn_code !== "null") ? $request->hsn_code : null;
+            $product = $this->getOrCreateProduct($hsnCode, $request->name, $request->category_id, $request->quantity, $invoice);
         }
         $address = Addres::where('invoice_id', $request->invoice_id)->first();
         $business_location = Locations::findOrFail($invoice->location_id);
@@ -557,15 +559,22 @@ public function addProduct(Request $request)
 
 private function getOrCreateProduct($hsnCode, $name, $category_id, $quantity, $invoice)
 {
-    
     $product = new Product();
-    $product->hsn_code = $hsnCode;
+    $product->hsn_code = $hsnCode ?? null;
     $product->name = $name;
     $product->business_id = $invoice->business_id;
     $product->location_id = $invoice->location_id;
-    $product->category_id = $category_id;
-    $product->quantity = $quantity;
+
+    if (!empty($category_id) && $category_id !== "null") {
+        $product->category_id = $category_id;
+    }
+
+    if (!empty($quantity) && is_numeric($quantity)) {
+        $product->quantity = $quantity;
+    }
+
     $product->save();
+
     return $product;
 }
 
