@@ -490,7 +490,6 @@ public function addProduct(Request $request)
 {
     $rules = [
         'invoice_id' => 'required|exists:invoices,id',
-        'hsn_code' => 'required',
         'name' => 'required',
         'price' => 'required|numeric|min:0',
         'quantity' => 'required|integer|min:1',
