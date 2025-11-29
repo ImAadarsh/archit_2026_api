@@ -3123,6 +3123,10 @@ public function getItemizedSalesReport(Request $request)
 
     public function generateAiWallImage(Request $request)
     {
+        // Increase execution time for AI generation (can take 60+ seconds)
+        set_time_limit(180); // 3 minutes
+        ini_set('max_execution_time', 180);
+        
         try {
             $rules = [
                 'wall_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240', // 10MB max
@@ -3204,20 +3208,41 @@ public function getItemizedSalesReport(Request $request)
 
             // Upload wall image
             $wallImageFile = $request->file('wall_image');
+            if (!$wallImageFile || !$wallImageFile->isValid()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid wall image file'
+                ], 400);
+            }
+            
             $wallImageName = 'wall_' . $userId . '_' . time() . '_' . uniqid() . '.' . $wallImageFile->getClientOriginalExtension();
             $wallImagePath = $wallImageFile->storeAs('public/ai_wall_images', $wallImageName);
             $wallImageFullPath = storage_path('app/' . $wallImagePath);
+            
+            if (!file_exists($wallImageFullPath)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to save wall image'
+                ], 500);
+            }
 
             // Generate AI image using Gemini
             $geminiApiKey = env('GEMINI_API_KEY');
             if (!$geminiApiKey) {
+                \Log::error('Gemini API key not configured');
+                // Clean up uploaded wall image
+                if (file_exists($wallImageFullPath)) {
+                    @unlink($wallImageFullPath);
+                }
                 return response()->json([
                     'status' => false,
                     'message' => 'Gemini API key not configured'
                 ], 500);
             }
 
+            \Log::info("Starting AI image generation for user {$userId}, product {$productId}");
             $aiGeneratedImage = $this->generateWallProductImage($geminiApiKey, $wallImageFullPath, $productImagePath, $product);
+            \Log::info("AI image generation completed for user {$userId}, product {$productId}");
 
             if (!$aiGeneratedImage) {
                 // Clean up uploaded wall image if generation fails
@@ -3356,7 +3381,8 @@ Requirements:
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($requestBody));
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Increased to 120 seconds for AI generation
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30); // Connection timeout
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             
             $result = curl_exec($ch);
