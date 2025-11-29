@@ -3447,6 +3447,7 @@ Requirements:
             $images = $query->get();
 
             return response()->json([
+                'success' => true,
                 'status' => true,
                 'message' => 'AI wall images retrieved successfully',
                 'data' => $images
