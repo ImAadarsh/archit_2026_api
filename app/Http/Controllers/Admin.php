@@ -3255,18 +3255,25 @@ public function getItemizedSalesReport(Request $request)
                 ], 500);
             }
 
-            // Save AI generated image
+            // Save AI generated image using Storage facade (consistent with other image uploads)
             $aiImageName = 'ai_generated_' . $userId . '_' . $productId . '_' . time() . '_' . uniqid() . '.jpg';
             $aiImagePath = 'public/ai_wall_images/' . $aiImageName;
-            $aiImageFullPath = storage_path('app/' . $aiImagePath);
             
-            // Ensure directory exists
-            $aiImageDir = dirname($aiImageFullPath);
-            if (!file_exists($aiImageDir)) {
-                mkdir($aiImageDir, 0777, true);
+            // Use Storage::put() to save binary image data (like how expenses save base64 images)
+            Storage::put($aiImagePath, $aiGeneratedImage);
+            
+            // Verify the file was saved
+            if (!Storage::exists($aiImagePath)) {
+                \Log::error("Failed to save AI generated image: {$aiImagePath}");
+                // Clean up uploaded wall image
+                if (file_exists($wallImageFullPath)) {
+                    @unlink($wallImageFullPath);
+                }
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to save AI generated image'
+                ], 500);
             }
-            
-            file_put_contents($aiImageFullPath, $aiGeneratedImage);
 
             // Save to database
             $aiWallImageId = DB::table('shop_ai_wall_images')->insertGetId([
