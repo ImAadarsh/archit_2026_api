@@ -3082,4 +3082,350 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    // AI Wall Image Generation APIs (No Auth Required)
+    public function getAiImagesCredits(Request $request)
+    {
+        try {
+            $userId = $request->get('userId');
+            
+            if (!$userId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User ID is required'
+                ], 400);
+            }
+
+            $user = DB::table('shop_users')->where('id', $userId)->first();
+            
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            $credits = isset($user->ai_image_left) ? (int)$user->ai_image_left : 20;
+
+            return response()->json([
+                'status' => true,
+                'credits' => $credits,
+                'message' => 'Credits retrieved successfully'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to get credits',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function generateAiWallImage(Request $request)
+    {
+        try {
+            $rules = [
+                'wall_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240', // 10MB max
+                'product_id' => 'required|exists:products,id',
+                'user_id' => 'required|integer',
+                'preference_id' => 'nullable|exists:shop_saved_preferences,id'
+            ];
+
+            $validator = Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $userId = $request->user_id;
+            $productId = $request->product_id;
+            $preferenceId = $request->preference_id;
+
+            // Check user credits
+            $user = DB::table('shop_users')->where('id', $userId)->first();
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            $credits = isset($user->ai_image_left) ? (int)$user->ai_image_left : 20;
+            if ($credits <= 0) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'No AI image credits left'
+                ], 400);
+            }
+
+            // Get product and its original image (is_mockup=0)
+            $product = Product::with(['images' => function($query) {
+                $query->where('is_mockup', 0)->orderBy('id', 'ASC');
+            }])->findOrFail($productId);
+
+            if (!$product->images || $product->images->isEmpty()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Product has no original images'
+                ], 400);
+            }
+
+            $productImage = $product->images->first();
+            
+            // Handle both storage path and URL paths
+            $productImagePath = null;
+            if (strpos($productImage->image, 'http') === 0) {
+                // If it's a URL, download it temporarily
+                $tempPath = storage_path('app/temp/product_' . $productId . '_' . time() . '.jpg');
+                $tempDir = dirname($tempPath);
+                if (!file_exists($tempDir)) {
+                    mkdir($tempDir, 0777, true);
+                }
+                
+                $imageData = @file_get_contents($productImage->image);
+                if ($imageData) {
+                    file_put_contents($tempPath, $imageData);
+                    $productImagePath = $tempPath;
+                }
+            } else {
+                $productImagePath = storage_path('app/' . $productImage->image);
+            }
+            
+            if (!$productImagePath || !file_exists($productImagePath)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Product image file not found'
+                ], 404);
+            }
+
+            // Upload wall image
+            $wallImageFile = $request->file('wall_image');
+            $wallImageName = 'wall_' . $userId . '_' . time() . '_' . uniqid() . '.' . $wallImageFile->getClientOriginalExtension();
+            $wallImagePath = $wallImageFile->storeAs('public/ai_wall_images', $wallImageName);
+            $wallImageFullPath = storage_path('app/' . $wallImagePath);
+
+            // Generate AI image using Gemini
+            $geminiApiKey = env('GEMINI_API_KEY');
+            if (!$geminiApiKey) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Gemini API key not configured'
+                ], 500);
+            }
+
+            $aiGeneratedImage = $this->generateWallProductImage($geminiApiKey, $wallImageFullPath, $productImagePath, $product);
+
+            if (!$aiGeneratedImage) {
+                // Clean up uploaded wall image if generation fails
+                if (file_exists($wallImageFullPath)) {
+                    @unlink($wallImageFullPath);
+                }
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to generate AI image'
+                ], 500);
+            }
+
+            // Save AI generated image
+            $aiImageName = 'ai_generated_' . $userId . '_' . $productId . '_' . time() . '_' . uniqid() . '.jpg';
+            $aiImagePath = 'public/ai_wall_images/' . $aiImageName;
+            $aiImageFullPath = storage_path('app/' . $aiImagePath);
+            
+            // Ensure directory exists
+            $aiImageDir = dirname($aiImageFullPath);
+            if (!file_exists($aiImageDir)) {
+                mkdir($aiImageDir, 0777, true);
+            }
+            
+            file_put_contents($aiImageFullPath, $aiGeneratedImage);
+
+            // Save to database
+            $aiWallImageId = DB::table('shop_ai_wall_images')->insertGetId([
+                'user_id' => $userId,
+                'product_id' => $productId,
+                'preference_id' => $preferenceId,
+                'wall_image' => $wallImagePath,
+                'ai_generated_image' => $aiImagePath,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            // Deduct credit
+            DB::table('shop_users')
+                ->where('id', $userId)
+                ->update(['ai_image_left' => max(0, $credits - 1)]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'AI image generated successfully',
+                'data' => [
+                    'id' => $aiWallImageId,
+                    'wall_image' => $wallImagePath,
+                    'ai_generated_image' => $aiImagePath,
+                    'credits_left' => max(0, $credits - 1)
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to generate AI image',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function generateWallProductImage($apiKey, $wallImagePath, $productImagePath, $product)
+    {
+        try {
+            // Read and encode images
+            $wallImageData = file_get_contents($wallImagePath);
+            $productImageData = file_get_contents($productImagePath);
+            
+            $wallImageBase64 = base64_encode($wallImageData);
+            $productImageBase64 = base64_encode($productImageData);
+
+            // Get product dimensions
+            $dimensions = "";
+            if (!empty($product->width) && !empty($product->height)) {
+                $dimensions = "The artwork dimensions are {$product->width} x {$product->height}.";
+            }
+
+            $isFramed = (isset($product->is_framed) && $product->is_framed == 1);
+            $frameInfo = $isFramed 
+                ? "This artwork has a frame. Make sure the same frame is visible in the final image and remove any black corners from the frame." 
+                : "This is a frameless artwork (canvas or unframed print).";
+
+            $prompt = "You are given two images:
+1. A wall/room image (first image)
+2. An artwork/product image (second image)
+
+Your task is to create a photorealistic image that seamlessly places the artwork onto the wall in the room image.
+
+Requirements:
+- Place the artwork on the wall in a natural, realistic position
+- Match the lighting and perspective of the room
+- Ensure the artwork appears to be physically hanging on the wall
+- Add realistic shadows and reflections
+- Maintain the artwork's original appearance and colors
+- {$dimensions}
+- {$frameInfo}
+- The artwork should be properly scaled to fit the wall space
+- Do not crop or distort the artwork
+- The final image should look like a professional photograph of the artwork in the room";
+
+            $requestBody = [
+                'contents' => [
+                    [
+                        'parts' => [
+                            [
+                                'inline_data' => [
+                                    'mime_type' => 'image/jpeg',
+                                    'data' => $wallImageBase64
+                                ]
+                            ],
+                            [
+                                'inline_data' => [
+                                    'mime_type' => 'image/jpeg',
+                                    'data' => $productImageBase64
+                                ]
+                            ],
+                            [
+                                'text' => $prompt
+                            ]
+                        ]
+                    ]
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.4,
+                    'topK' => 40,
+                    'topP' => 0.95,
+                    'maxOutputTokens' => 8192,
+                    'responseModalities' => ['Image']
+                ]
+            ];
+
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" . $apiKey;
+            
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($requestBody));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            
+            $result = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                \Log::error("Gemini API Error: HTTP {$httpCode}, Response: " . substr($result, 0, 500));
+                return false;
+            }
+
+            $response = json_decode($result, true);
+            
+            if (!isset($response['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
+                \Log::error("Gemini API: No image data in response");
+                return false;
+            }
+
+            $generatedImageData = base64_decode($response['candidates'][0]['content']['parts'][0]['inlineData']['data']);
+            return $generatedImageData;
+
+        } catch (\Exception $e) {
+            \Log::error("Error generating wall product image: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function getAiWallImages(Request $request)
+    {
+        try {
+            $userId = $request->get('userId');
+            $preferenceId = $request->get('preference_id');
+
+            if (!$userId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User ID is required'
+                ], 400);
+            }
+
+            $query = DB::table('shop_ai_wall_images')
+                ->join('products', 'shop_ai_wall_images.product_id', '=', 'products.id')
+                ->where('shop_ai_wall_images.user_id', $userId)
+                ->select(
+                    'shop_ai_wall_images.*',
+                    'products.name as product_name',
+                    'products.price as product_price'
+                )
+                ->orderBy('shop_ai_wall_images.created_at', 'DESC');
+
+            if ($preferenceId) {
+                $query->where('shop_ai_wall_images.preference_id', $preferenceId);
+            }
+
+            $images = $query->get();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'AI wall images retrieved successfully',
+                'data' => $images
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve AI wall images',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
