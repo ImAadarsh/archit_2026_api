@@ -3292,6 +3292,7 @@ public function getItemizedSalesReport(Request $request)
                 ->update(['ai_image_left' => max(0, $credits - 1)]);
 
             return response()->json([
+                'success' => true,
                 'status' => true,
                 'message' => 'AI image generated successfully',
                 'data' => [
