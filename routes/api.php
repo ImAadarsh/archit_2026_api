@@ -128,7 +128,7 @@ Route::get('/business/{id}', [App\Http\Controllers\Admin::class, 'getBusinessDet
 // Get all products with images
 Route::get('/products-with-images', [App\Http\Controllers\Admin::class, 'getAllProductsWithImages']);
 
-// AI Wall Images (No Auth Required)
-Route::get('/public/ai-wall-images/credits', [App\Http\Controllers\Admin::class, 'getAiImagesCredits']);
-Route::post('/public/ai-wall-images/generate', [App\Http\Controllers\Admin::class, 'generateAiWallImage']);
-Route::get('/public/ai-wall-images/list', [App\Http\Controllers\Admin::class, 'getAiWallImages']);
+// AI Wall Images (No Auth Required - Public Routes)
+Route::get('/ai-wall-images/credits', [App\Http\Controllers\Admin::class, 'getAiImagesCredits']);
+Route::post('/ai-wall-images/generate', [App\Http\Controllers\Admin::class, 'generateAiWallImage']);
+Route::get('/ai-wall-images/list', [App\Http\Controllers\Admin::class, 'getAiWallImages']);
