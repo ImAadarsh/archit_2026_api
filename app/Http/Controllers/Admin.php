@@ -3028,14 +3028,52 @@ public function getItemizedSalesReport(Request $request)
                 ], 400);
             }
 
+            // Sorting
+            $sortBy = $request->get('sort_by', 'id'); // Default sort by 'id'
+            $sortOrder = $request->get('sort_order', 'desc'); // Default sort order 'desc'
+            
+            // Validate sort order
+            $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc']) ? strtolower($sortOrder) : 'desc';
+            
+            // Validate sort_by field (only allow valid product table columns)
+            $allowedSortFields = [
+                'id', 'name', 'price', 'created_at', 'updated_at', 
+                'product_serial_number', 'artist_name', 'quantity',
+                'height', 'width', 'item_code', 'hsn_code'
+            ];
+            
+            if (!in_array($sortBy, $allowedSortFields)) {
+                $sortBy = 'id'; // Fallback to default
+            }
+            
+            $query->orderBy($sortBy, $sortOrder);
+
+            // Pagination - support both 'limit' and 'per_page' parameters
+            $limit = $request->get('limit', $request->get('per_page', 20)); // Default to 20 items per page
+            $page = $request->get('page', 1); // Default to page 1
+            
+            // Validate limit (max 100 items per page for performance)
+            $limit = min(max((int)$limit, 1), 100);
+            
             // Get products with pagination
-            $perPage = $request->get('per_page', 999);
-            $products = $query->paginate($perPage);
+            $products = $query->paginate($limit, ['*'], 'page', $page);
 
             return response()->json([
                 'status' => true,
                 'message' => 'Products retrieved successfully.',
-                'data' => $products
+                'data' => $products->items(),
+                'pagination' => [
+                    'current_page' => $products->currentPage(),
+                    'per_page' => $products->perPage(),
+                    'total' => $products->total(),
+                    'last_page' => $products->lastPage(),
+                    'from' => $products->firstItem(),
+                    'to' => $products->lastItem(),
+                ],
+                'sort' => [
+                    'sort_by' => $sortBy,
+                    'sort_order' => $sortOrder
+                ]
             ], 200);
 
         } catch (\Exception $e) {
