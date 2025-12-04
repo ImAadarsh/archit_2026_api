@@ -13,6 +13,7 @@ class ProductImage extends Model
         'product_id',
         'image',
         'is_mockup',
+        'just_product',
         'mockup_description',
     ];
 

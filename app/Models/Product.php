@@ -28,6 +28,9 @@ class Product extends Model
         'quantity',
         'is_temp',
         'orientation',
+        'is_processed',
+        'description',
+        'suitable_for',
     ];
 
     public function category()

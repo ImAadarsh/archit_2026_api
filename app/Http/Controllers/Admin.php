@@ -2445,6 +2445,11 @@ public function getItemizedSalesReport(Request $request)
                                 $imageData['mockup_description'] = $request->mockup_description ?? '';
                             }
                             
+                            // Add just_product flag if set to 1
+                            if ($request->just_product == 1) {
+                                $imageData['just_product'] = 1;
+                            }
+                            
                             $productImage = \App\Models\ProductImage::create($imageData);
                             
                             $uploadedImages[] = $productImage;
@@ -2465,6 +2470,11 @@ public function getItemizedSalesReport(Request $request)
                         if ($request->is_mockup == 1) {
                             $imageData['is_mockup'] = 1;
                             $imageData['mockup_description'] = $request->mockup_description ?? '';
+                        }
+                        
+                        // Add just_product flag if set to 1
+                        if ($request->just_product == 1) {
+                            $imageData['just_product'] = 1;
                         }
                         
                         $productImage = \App\Models\ProductImage::create($imageData);
@@ -2502,6 +2512,11 @@ public function getItemizedSalesReport(Request $request)
                             if ($request->is_mockup == 1) {
                                 $imageData['is_mockup'] = 1;
                                 $imageData['mockup_description'] = $request->mockup_description ?? '';
+                            }
+                            
+                            // Add just_product flag if set to 1
+                            if ($request->just_product == 1) {
+                                $imageData['just_product'] = 1;
                             }
                             
                             $productImage = \App\Models\ProductImage::create($imageData);
@@ -3458,6 +3473,80 @@ Requirements:
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve AI wall images',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reset product processing status and optionally delete mockup images
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function resetProductProcessing(Request $request)
+    {
+        $rules = [
+            'product_id' => 'required|exists:products,id',
+            'delete_mockup' => 'nullable|boolean',
+        ];
+        
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        try {
+            // Find the product
+            $product = Product::findOrFail($request->product_id);
+            
+            // Set is_processed to 0
+            $product->is_processed = 0;
+            $product->save();
+            
+            $deletedCount = 0;
+            
+            // If delete_mockup is true, delete all mockup images
+            if ($request->delete_mockup === true || $request->delete_mockup === 'true' || $request->delete_mockup === 1) {
+                // Get all mockup images for this product
+                $mockupImages = \App\Models\ProductImage::where('product_id', $product->id)
+                    ->where('is_mockup', 1)
+                    ->get();
+                
+                foreach ($mockupImages as $mockupImage) {
+                    // Delete the file from storage if it exists
+                    if (\Storage::exists($mockupImage->image)) {
+                        \Storage::delete($mockupImage->image);
+                    }
+                    
+                    // Delete the database record
+                    $mockupImage->delete();
+                    $deletedCount++;
+                }
+            }
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Product processing reset successfully.',
+                'data' => [
+                    'product_id' => $product->id,
+                    'is_processed' => $product->is_processed,
+                    'mockup_images_deleted' => $deletedCount
+                ]
+            ], 200);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product not found.'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to reset product processing.',
                 'error' => $e->getMessage()
             ], 500);
         }

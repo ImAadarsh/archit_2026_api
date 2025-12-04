@@ -110,6 +110,9 @@ Route::delete('/products/{id}', 'App\\Http\\Controllers\\Admin@deleteProduct');
 Route::post('/products/images/delete', 'App\\Http\\Controllers\\Admin@deleteProductImage');
 Route::post('/products/images/add', 'App\\Http\\Controllers\\Admin@addProductImages');
 
+// Reset Product Processing
+Route::post('/products/reset-processing', 'App\\Http\\Controllers\\Admin@resetProductProcessing');
+
 // Subscription Plan
 Route::get('/business/{business_id}/subscription-plan', 'App\\Http\\Controllers\\Admin@getBusinessSubscriptionPlan');
 
