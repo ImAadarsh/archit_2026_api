@@ -321,6 +321,7 @@ Retrieves products with their associated images, categories, and relationships. 
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
+| `product_id` | integer | Yes* | - | Get specific product by ID |
 | `business_id` | integer | Yes* | - | Filter by business ID |
 | `location_id` | integer | Yes* | - | Filter by location ID |
 | `limit` | integer | No | 20 | Number of items per page (max 100) |
@@ -328,7 +329,7 @@ Retrieves products with their associated images, categories, and relationships. 
 | `sort_by` | string | No | id | Field to sort by |
 | `sort_order` | string | No | desc | Sort direction: `asc` or `desc` |
 
-\* At least one of `business_id` or `location_id` is required
+\* At least one of `product_id`, `business_id`, or `location_id` is required
 
 ## Allowed Sort Fields
 
@@ -347,6 +348,16 @@ You can sort by any of these fields:
 - `hsn_code` - HSN code
 
 ## Request Examples
+
+### Get Specific Product by ID
+```
+GET /api/products-with-images?product_id=123
+```
+
+### Get Specific Product with Additional Filters
+```
+GET /api/products-with-images?product_id=123&business_id=1
+```
 
 ### Basic Request
 ```
@@ -459,7 +470,7 @@ GET /api/products-with-images?business_id=1&sort_by=created_at&sort_order=desc&l
 ```json
 {
     "status": false,
-    "message": "Either business_id or location_id is required."
+    "message": "Either product_id, business_id, or location_id is required."
 }
 ```
 
@@ -534,6 +545,7 @@ curl -X GET "http://your-domain.com/api/products-with-images?business_id=1&locat
 
 ## Usage Example (Java/Android - as shown in your code)
 
+### Get All Products with Filters
 ```java
 String base_url = "http://your-domain.com";
 int businessId = 1;
@@ -552,6 +564,16 @@ String url = base_url + "/api/products-with-images" +
 // Make HTTP GET request to url
 ```
 
+### Get Specific Product by ID
+```java
+String base_url = "http://your-domain.com";
+int productId = 123;
+
+String url = base_url + "/api/products-with-images?product_id=" + productId;
+
+// Make HTTP GET request to url
+```
+
 ## Performance Notes
 
 - **Maximum limit**: 100 items per page (enforced for performance)
@@ -561,6 +583,11 @@ String url = base_url + "/api/products-with-images" +
 - **Temp products**: Products with `is_temp=1` are automatically excluded
 
 ## Common Use Cases
+
+### Get Single Product Details
+```
+?product_id=123
+```
 
 ### Latest Products First
 ```
@@ -581,4 +608,22 @@ String url = base_url + "/api/products-with-images" +
 ```
 ?business_id=1&sort_by=quantity&sort_order=asc&limit=25
 ```
+
+### Search Specific Product in Location
+```
+?product_id=123&location_id=5
+```
+
+## Filter Combinations
+
+You can combine filters in various ways:
+
+| Use Case | Parameters | Description |
+|----------|------------|-------------|
+| Single product | `product_id=123` | Get one specific product |
+| All business products | `business_id=1` | All products for a business |
+| All location products | `location_id=5` | All products for a location |
+| Business + Location | `business_id=1&location_id=5` | Products in specific location of business |
+| Product + Business | `product_id=123&business_id=1` | Verify product belongs to business |
+| Product + Location | `product_id=123&location_id=5` | Verify product is in location |
 

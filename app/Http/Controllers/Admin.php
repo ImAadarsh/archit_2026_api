@@ -3010,6 +3010,11 @@ public function getItemizedSalesReport(Request $request)
             $query = Product::with(['category', 'artCategory', 'images'])
                 ->where('is_temp', 0);
 
+            // Filter by product_id if provided (specific product lookup)
+            if ($request->has('product_id') && !empty($request->product_id)) {
+                $query->where('id', $request->product_id);
+            }
+
             // Filter by business_id if provided
             if ($request->has('business_id') && !empty($request->business_id)) {
                 $query->where('business_id', $request->business_id);
@@ -3020,11 +3025,12 @@ public function getItemizedSalesReport(Request $request)
                 $query->where('location_id', $request->location_id);
             }
 
-            // If neither business_id nor location_id is provided, return error
-            if (!$request->has('business_id') && !$request->has('location_id')) {
+            // If product_id is provided, we don't require business_id or location_id
+            // Otherwise, at least one of them is required
+            if (!$request->has('product_id') && !$request->has('business_id') && !$request->has('location_id')) {
                 return response()->json([
                     'status' => false,
-                    'message' => 'Either business_id or location_id is required.'
+                    'message' => 'Either product_id, business_id, or location_id is required.'
                 ], 400);
             }
 
