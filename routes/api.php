@@ -131,6 +131,9 @@ Route::get('/business/{id}', [App\Http\Controllers\Admin::class, 'getBusinessDet
 // Get all products with images
 Route::get('/products-with-images', [App\Http\Controllers\Admin::class, 'getAllProductsWithImages']);
 
+// Get total products count for a business
+Route::get('/products-count', [App\Http\Controllers\Admin::class, 'getProductsCount']);
+
 // AI Wall Images (No Auth Required - Public Routes)
 Route::get('/ai-wall-images/credits', [App\Http\Controllers\Admin::class, 'getAiImagesCredits']);
 Route::post('/ai-wall-images/generate', [App\Http\Controllers\Admin::class, 'generateAiWallImage']);

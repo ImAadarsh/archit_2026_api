@@ -3091,6 +3091,48 @@ public function getItemizedSalesReport(Request $request)
         }
     }
 
+    public function getProductsCount(Request $request)
+    {
+        try {
+            $query = Product::where('is_temp', 0);
+
+            // Filter by business_id (required)
+            if ($request->has('business_id') && !empty($request->business_id)) {
+                $query->where('business_id', $request->business_id);
+            } else {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'business_id is required.'
+                ], 400);
+            }
+
+            // Filter by location_id if provided
+            if ($request->has('location_id') && !empty($request->location_id)) {
+                $query->where('location_id', $request->location_id);
+            }
+
+            // Get total count
+            $totalCount = $query->count();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Products count retrieved successfully.',
+                'data' => [
+                    'total_count' => $totalCount,
+                    'business_id' => $request->business_id,
+                    'location_id' => $request->get('location_id', null)
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve products count.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function uploadBusinessLogo(Request $request)
     {
         try {
