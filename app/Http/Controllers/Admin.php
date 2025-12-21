@@ -3007,55 +3007,110 @@ public function getItemizedSalesReport(Request $request)
     public function getAllProductsWithImages(Request $request)
     {
         try {
+            // Start query with necessary relationships
             $query = Product::with(['category', 'artCategory', 'images'])
                 ->where('is_temp', 0);
-
+            // --- CORE FILTERS ---
             // Filter by product_id if provided (specific product lookup)
             if ($request->has('product_id') && !empty($request->product_id)) {
                 $query->where('id', $request->product_id);
             }
-
             // Filter by business_id if provided
             if ($request->has('business_id') && !empty($request->business_id)) {
                 $query->where('business_id', $request->business_id);
             }
-
             // Filter by location_id if provided
             if ($request->has('location_id') && !empty($request->location_id)) {
                 $query->where('location_id', $request->location_id);
             }
-
-            // If product_id is provided, we don't require business_id or location_id
-            // Otherwise, at least one of them is required
+            // Validation: Require at least one core identifier if not a general listing
             if (!$request->has('product_id') && !$request->has('business_id') && !$request->has('location_id')) {
+                // Determine if we want to allow listing all products without business/location constraint.
+                // If strict validation is needed as per original code:
                 return response()->json([
                     'status' => false,
                     'message' => 'Either product_id, business_id, or location_id is required.'
                 ], 400);
             }
-
-            // Sorting
-            $sortBy = $request->get('sort_by', 'id'); // Default sort by 'id'
-            $sortOrder = $request->get('sort_order', 'desc'); // Default sort order 'desc'
+            // --- ADDITIONAL SEARCH & FILTERS ---
+            // 1. Is Labelled Filter
+            if ($request->has('is_labelled')) {
+                $isLabelled = $request->input('is_labelled');
+                // Check if it's not "All" (-1)
+                if ($isLabelled !== null && $isLabelled != -1) {
+                     $query->where('is_labelled', $isLabelled);
+                }
+            }
+            // 2. Category (Product Type)
+            if ($request->has('category_id') && !empty($request->category_id)) {
+                $query->where('category_id', $request->input('category_id'));
+            }
+            // 3. Art Category (Product Category)
+            if ($request->has('art_category_id') && !empty($request->art_category_id)) {
+                // Support both 'art_category_id' (app) and 'art_category' (if generic)
+                $query->where('art_category_id', $request->input('art_category_id'));
+            }
+            // 4. Price Range
+            if ($request->has('min_price')) {
+                $query->where('price', '>=', $request->input('min_price'));
+            }
+            if ($request->has('max_price')) {
+                $query->where('price', '<=', $request->input('max_price'));
+            }
+            // 5. Artist Name (Partial Search)
+            if ($request->has('artist') && !empty($request->artist)) {
+                $artist = $request->input('artist');
+                $query->where('artist_name', 'like', '%' . $artist . '%');
+            }
+            // 6. Dimensions (Height & Width)
+            if ($request->has('height_min')) {
+                $query->where('height', '>=', $request->input('height_min'));
+            }
+            if ($request->has('height_max')) {
+                $query->where('height', '<=', $request->input('height_max'));
+            }
+            if ($request->has('width_min')) {
+                $query->where('width', '>=', $request->input('width_min'));
+            }
+            if ($request->has('width_max')) {
+                $query->where('width', '<=', $request->input('width_max'));
+            }
+            // 7. Orientation
+            if ($request->has('orientation')) {
+                $orientation = $request->input('orientation');
+                if (!empty($orientation)) {
+                     $query->where('orientation', $orientation);
+                }
+            }
+            // --- SORTING ---
+            
+            $sortBy = $request->get('sort_by', 'id'); // Default to 'id' if not provided
+            $sortOrder = $request->get('sort_order', 'desc'); // Default to 'desc'
             
             // Validate sort order
             $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc']) ? strtolower($sortOrder) : 'desc';
             
-            // Validate sort_by field (only allow valid product table columns)
+            // Validate sort_by field
             $allowedSortFields = [
                 'id', 'name', 'price', 'created_at', 'updated_at', 
                 'product_serial_number', 'artist_name', 'quantity',
-                'height', 'width', 'item_code', 'hsn_code'
+                'height', 'width', 'item_code', 'hsn_code', 'size'
             ];
             
             if (!in_array($sortBy, $allowedSortFields)) {
-                $sortBy = 'id'; // Fallback to default
+                $sortBy = 'id'; // Fallback
             }
+            // Apply Sort
+            if ($sortBy == 'size') {
+                // Sort by area (height * width)
+                $query->orderByRaw('(height * width) ' . $sortOrder);
+            } else {
+                $query->orderBy($sortBy, $sortOrder);
+            }
+            // --- PAGINATION ---
             
-            $query->orderBy($sortBy, $sortOrder);
-
             // Pagination - support both 'limit' and 'per_page' parameters
-            $limit = $request->get('limit', $request->get('per_page', 20)); // Default to 20 items per page
+            $limit = $request->get('limit', $request->get('per_page', 50)); // Default upgraded to 50
             $page = $request->get('page', 1); // Default to page 1
             
             // Validate limit (max 100 items per page for performance)
@@ -3063,7 +3118,6 @@ public function getItemizedSalesReport(Request $request)
             
             // Get products with pagination
             $products = $query->paginate($limit, ['*'], 'page', $page);
-
             return response()->json([
                 'status' => true,
                 'message' => 'Products retrieved successfully.',
@@ -3076,12 +3130,12 @@ public function getItemizedSalesReport(Request $request)
                     'from' => $products->firstItem(),
                     'to' => $products->lastItem(),
                 ],
+                // Explicitly return sorting info used
                 'sort' => [
                     'sort_by' => $sortBy,
                     'sort_order' => $sortOrder
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
