@@ -3082,6 +3082,18 @@ public function getItemizedSalesReport(Request $request)
                      $query->where('orientation', $orientation);
                 }
             }
+            // 8. Stock Status
+            if ($request->has('stock_status')) {
+                $stockStatus = $request->input('stock_status');
+                if ($stockStatus == 'in_stock') {
+                    $query->where('quantity', '>', 0);
+                } elseif ($stockStatus == 'out_of_stock') {
+                    $query->where(function($q) {
+                        $q->where('quantity', '<=', 0)
+                          ->orWhereNull('quantity');
+                    });
+                }
+            }
             // --- SORTING ---
             
             $sortBy = $request->get('sort_by', 'id'); // Default to 'id' if not provided
