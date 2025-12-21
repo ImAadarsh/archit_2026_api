@@ -138,3 +138,4 @@ Route::get('/products-count', [App\Http\Controllers\Admin::class, 'getProductsCo
 Route::get('/ai-wall-images/credits', [App\Http\Controllers\Admin::class, 'getAiImagesCredits']);
 Route::post('/ai-wall-images/generate', [App\Http\Controllers\Admin::class, 'generateAiWallImage']);
 Route::get('/ai-wall-images/list', [App\Http\Controllers\Admin::class, 'getAiWallImages']);
+Route::post('products/update-labels', [App\Http\Controllers\Admin::class, 'updateProductLabels']);

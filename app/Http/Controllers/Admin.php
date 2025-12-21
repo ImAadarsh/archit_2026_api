@@ -3637,5 +3637,33 @@ Requirements:
             ], 500);
         }
     }
+    // INSTRUCTION: Add this method to your Admin.php controller class
+public function updateProductLabels(Request $request) {
+    try {
+        $ids = $request->input('ids');
+        $isLabelled = $request->input('is_labelled');
+        if (empty($ids) || !is_array($ids)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid product IDs'
+            ], 400);
+        }
+        // Validate is_labelled is 0 or 1
+        $isLabelled = $isLabelled ? 1 : 0;
+        // Update products
+        DB::table('products')
+            ->whereIn('id', $ids)
+            ->update(['is_labelled' => $isLabelled]);
+        return response()->json([
+            'status' => true,
+            'message' => 'Products label updated successfully'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Error: ' . $e->getMessage()
+        ], 500);
+    }
+}
 
 }
