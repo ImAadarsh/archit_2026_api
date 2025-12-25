@@ -3094,6 +3094,14 @@ public function getItemizedSalesReport(Request $request)
                     });
                 }
             }
+// 9. Framed/Unframed
+            if ($request->has('is_framed')) {
+                $isFramed = $request->input('is_framed');
+                // Allow 0 or 1
+                if ($isFramed !== null && $isFramed !== '') {
+                    $query->where('is_framed', $isFramed);
+                }
+            }
             // --- SORTING ---
             
             $sortBy = $request->get('sort_by', 'id'); // Default to 'id' if not provided
