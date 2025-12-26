@@ -516,6 +516,11 @@ public function addProduct(Request $request)
                     'message' => 'Product not found with ID: ' . $request->product_id
                 ], 404);
             }
+
+            if ($product->is_temp == 0) {
+                $product->quantity = max($product->quantity - $request->quantity, 0);
+                $product->save();
+            }
         } else {
             if (empty($request->name)) {
                 return response()->json(['status' => false, 'message' => 'Product name is required when product_id is not provided.'], 422);
