@@ -29,9 +29,9 @@ class Admin extends Controller
             'alternate_phone' => 'nullable',
             'owner_name' => 'required',
         ];
-    
+
         $validator = Validator::make($request->all(), $rules);
-    
+
         if ($validator->fails()) {
             return $validator->errors();
         }
@@ -62,1551 +62,1379 @@ class Admin extends Controller
         }
     }
     public function insertLocation(Request $request)
-{
-    $rules = [
-        'location_name' => 'required',
-        'business_id' => 'required',
-        'address' => 'required',
-        'email' => 'required|email',
-        'alternate_phone' => 'nullable',
-        'phone' => 'required',
-    ];
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return $validator->errors();
-    }
-
-    try {
-        $location = new Locations();
-        $location->location_name = $request->location_name;
-        $location->business_id = $request->business_id;
-        $location->address = $request->address;
-        $location->email = $request->email;
-        $location->alternate_phone = $request->input('alternate_phone');
-        $location->phone = $request->phone;
-        $location->save();
-        return response([
-            'status' => true,
-            'message' => 'Location created successfully.',
-            'data' => $location
-        ], 200);
-    } catch (\Exception $e) {
-        return response([
-            'status' => false,
-            'message' => 'Failed to insert location.',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-
-public function createInvoice(Request $request)
-{
-    $rules = [
-        'type' => 'required|in:normal,performa'
-    ];
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
-    }
-
-    try {
-        DB::beginTransaction();
-
-        $nextSerialNo = $this->getNextSerialNumber($request->type, $request->location_id);
-
-        $invoice = Invoice::create([
-            'serial_no' => $nextSerialNo,
-            'name' => $request->name,
-            'mobile_number' => $request->mobile_number,
-            'customer_type' => $request->customer_type,
-            'doc_type' => $request->doc_type,
-            'doc_no' => strtoupper($request->doc_no),
-            'business_id' => $request->business_id,
-            'location_id' => $request->location_id,
-            'payment_mode' => $request->payment_mode,
-            'billing_address_id' => $request->billing_address_id,
-            'shipping_address_id' => $request->shipping_address_id,
-            'type' => $request->type,
-            'is_completed' => 0,
-            'invoice_date' => $request->invoice_date,
-            'full_paid' => $request->full_paid,
-            'total_paid' => $request->total_paid
-        ]);
-
-        DB::commit();
-
-        return response()->json([
-            'status' => true, 
-            'message' => 'Invoice created successfully.', 
-            'data' => $invoice
-        ], 201);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false, 
-            'message' => 'Failed to create invoice.', 
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-
-private function getNextSerialNumber($type, $location_id)
-{
-    if ($type === 'performa') {
-        return null;
-    }
-    if(!(Invoice::where('type', '!=', 'performa')->where('location_id',$location_id)->first())){
-        return 1;
-    }
-    return Invoice::where('type', '!=', 'performa')->where('location_id',$location_id)
-        ->max('serial_no') + 1;
-}
-    public function getAllInvoices(Request $request){
-    try {
-        $query = Invoice::query();
-        $query->orderBy('created_at', 'desc');
-
-                  // Filter by day
-                  if($request->has('day')){
-                    $query->whereDate('invoice_date', $request->day);
-                }
-        
-                // Filter by month
-                if($request->has('month')){
-                    $query->whereMonth('invoice_date', $request->month);
-                }
-        
-                // Filter by week
-                if($request->has('week_start')){
-                    // Assuming the week is passed as an array with start and end dates
-                    $query->whereDate('invoice_date', '>=', $request->week_start)
-                          ->whereDate('invoice_date', '<=', $request->week_end);
-                }
-        
-                // Filter by year
-                if($request->has('year')){
-                    $query->whereYear('invoice_date', $request->year);
-                }
-
-        // If location_id and business_id are provided, filter by both
-        if ($request->has('location_id') && $request->has('business_id')) {
-            $query->where('location_id', $request->location_id)
-                  ->where('business_id', $request->business_id);
-        }
-        // If only business_id is provided, filter by business_id
-        elseif ($request->has('business_id')) {
-            $query->where('business_id', $request->business_id);
-        }
-
-        // Retrieve the invoices along with the total price
-        $invoices = $query->withSum('items', 'price_of_all')->get();
-
-        // Check if any invoices are found
-        if ($invoices->isEmpty()) {
-            return response()->json(['status' => false, 'message' => 'No invoices found.'], 404);
-        }
-
-        // Return the invoices
-        return response()->json(['status' => true, 'message' => 'Invoices retrieved successfully.', 'data' => $invoices], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to retrieve invoices.', 'error' => $e->getMessage()], 500);
-    }
-}
-    public function getDetailedInvoice($invoiceId){
-    try {
-        // Fetch the invoice along with its related items and product details
-        $invoice = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])->find($invoiceId);
-
-        // Check if the invoice is found
-        if (!$invoice) {
-            return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
-        }
-
-        // Return the detailed invoice
-        return response()->json(['status' => true, 'message' => 'Invoice details retrieved successfully.', 'data' => $invoice], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to retrieve invoice details.', 'error' => $e->getMessage()], 500);
-    }
-}
-
-public function getDetailedInvoiceWeb($invoiceId)
-{
-    try {
-        // Fetch the invoice along with its related items, product details, and addresses
-        $invoice = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
-            ->leftJoin('businessses', 'invoices.business_id', '=', 'businessses.id')
-            ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
-            ->select(
-                'invoices.*',
-                'businessses.gst as business_gst',
-                'businessses.business_name as business_name',
-                'businessses.logo as business_logo',
-                'locations.location_name',
-                'locations.address as location_address',
-                'locations.state as location_state',
-                'locations.email as location_email',
-                'locations.phone as location_phone',
-                'locations.alternate_phone as location_alternate_phone'
-            )
-            ->find($invoiceId);
-
-        // Check if the invoice is found
-        if (!$invoice) {
-            return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
-        }
-
-        // Fetch bank details for the business and location
-        $bankDetails = DB::table('banks')
-            ->where('business_id', $invoice->business_id)
-            ->where('location_id', $invoice->location_id)
-            ->first();
-
-        // Prepare business and location info
-        $businessInfo = [
-            'name' => $invoice->business_name ?? 'InvoiceMate',
-            'address' => $invoice->location_address ?? 'Shop No: 28 Kirti Nagar Furniture Block, Kirti Nagar, New Delhi – 110015',
-            'phone' => $invoice->location_phone ?? '+91- 9868 200 002',
-            'alternate_phone' => $invoice->location_alternate_phone ?? '+91- 9289 388 374',
-            'gst' => $invoice->business_gst ?? '07AADPA2039E1ZF',
-            'logo' => $invoice->business_logo ?? null
+    {
+        $rules = [
+            'location_name' => 'required',
+            'business_id' => 'required',
+            'address' => 'required',
+            'email' => 'required|email',
+            'alternate_phone' => 'nullable',
+            'phone' => 'required',
         ];
 
-        // Add business info and bank details to the invoice data
-        $invoice->business_info = $businessInfo;
-        $invoice->bank_details = $bankDetails;
+        $validator = Validator::make($request->all(), $rules);
 
-        // Return the detailed invoice
-        return response()->json([
-            'status' => true,
-            'message' => 'Invoice details retrieved successfully.',
-            'data' => $invoice
-        ], 200);
+        if ($validator->fails()) {
+            return $validator->errors();
+        }
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Failed to retrieve invoice details.',
-            'error' => $e->getMessage()
-        ], 500);
+        try {
+            $location = new Locations();
+            $location->location_name = $request->location_name;
+            $location->business_id = $request->business_id;
+            $location->address = $request->address;
+            $location->email = $request->email;
+            $location->alternate_phone = $request->input('alternate_phone');
+            $location->phone = $request->phone;
+            $location->save();
+            return response([
+                'status' => true,
+                'message' => 'Location created successfully.',
+                'data' => $location
+            ], 200);
+        } catch (\Exception $e) {
+            return response([
+                'status' => false,
+                'message' => 'Failed to insert location.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
-public function getBulkInvoicesWeb(Request $request)
-{
-    try {
-        // Start with a base query
-        $query = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
-            ->leftJoin('businessses', 'invoices.business_id', '=', 'businessses.id')
-            ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
-            ->select(
-                'invoices.*',
-                'businessses.gst as business_gst',
-                'locations.location_name',
-                'locations.address as location_address',
-                'locations.email as location_email',
-                'locations.phone as location_phone',
-                'locations.alternate_phone as location_alternate_phone'
-            )
-            ->where('invoices.is_completed', 1);
+    public function createInvoice(Request $request)
+    {
+        $rules = [
+            'type' => 'required|in:normal,performa'
+        ];
 
-        // Apply date range filter if provided
-        if ($request->has('start_date') && $request->has('end_date')) {
-            $query->whereDate('invoices.invoice_date', '>=', $request->start_date)
-                  ->whereDate('invoices.invoice_date', '<=', $request->end_date);
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
         }
 
-        // Apply min amount filter if provided
-        if ($request->has('min_amount')) {
-            $query->where('invoices.total_amount', '>=', $request->min_amount);
+        try {
+            DB::beginTransaction();
+
+            $nextSerialNo = $this->getNextSerialNumber($request->type, $request->location_id);
+
+            $invoice = Invoice::create([
+                'serial_no' => $nextSerialNo,
+                'name' => $request->name,
+                'mobile_number' => $request->mobile_number,
+                'customer_type' => $request->customer_type,
+                'doc_type' => $request->doc_type,
+                'doc_no' => strtoupper($request->doc_no),
+                'business_id' => $request->business_id,
+                'location_id' => $request->location_id,
+                'payment_mode' => $request->payment_mode,
+                'billing_address_id' => $request->billing_address_id,
+                'shipping_address_id' => $request->shipping_address_id,
+                'type' => $request->type,
+                'is_completed' => 0,
+                'invoice_date' => $request->invoice_date,
+                'full_paid' => $request->full_paid,
+                'total_paid' => $request->total_paid
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoice created successfully.',
+                'data' => $invoice
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to create invoice.',
+                'error' => $e->getMessage()
+            ], 500);
         }
+    }
 
-        // Apply max amount filter if provided
-        if ($request->has('max_amount')) {
-            $query->where('invoices.total_amount', '<=', $request->max_amount);
+    private function getNextSerialNumber($type, $location_id)
+    {
+        if ($type === 'performa') {
+            return null;
         }
-
-        // Apply type filter if provided
-        if ($request->has('type')) {
-            $query->where('invoices.type', $request->type);
+        if (!(Invoice::where('type', '!=', 'performa')->where('location_id', $location_id)->first())) {
+            return 1;
         }
+        return Invoice::where('type', '!=', 'performa')->where('location_id', $location_id)
+            ->max('serial_no') + 1;
+    }
+    public function getAllInvoices(Request $request)
+    {
+        try {
+            $query = Invoice::query();
+            $query->orderBy('created_at', 'desc');
 
-        // Apply payment mode filter if provided
-        if ($request->has('payment_mode')) {
-            $query->where('invoices.payment_mode', $request->payment_mode);
+            // Filter by day
+            if ($request->has('day')) {
+                $query->whereDate('invoice_date', $request->day);
+            }
+
+            // Filter by month
+            if ($request->has('month')) {
+                $query->whereMonth('invoice_date', $request->month);
+            }
+
+            // Filter by week
+            if ($request->has('week_start')) {
+                // Assuming the week is passed as an array with start and end dates
+                $query->whereDate('invoice_date', '>=', $request->week_start)
+                    ->whereDate('invoice_date', '<=', $request->week_end);
+            }
+
+            // Filter by year
+            if ($request->has('year')) {
+                $query->whereYear('invoice_date', $request->year);
+            }
+
+            // If location_id and business_id are provided, filter by both
+            if ($request->has('location_id') && $request->has('business_id')) {
+                $query->where('location_id', $request->location_id)
+                    ->where('business_id', $request->business_id);
+            }
+            // If only business_id is provided, filter by business_id
+            elseif ($request->has('business_id')) {
+                $query->where('business_id', $request->business_id);
+            }
+
+            // Retrieve the invoices along with the total price
+            $invoices = $query->withSum('items', 'price_of_all')->get();
+
+            // Check if any invoices are found
+            if ($invoices->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'No invoices found.'], 404);
+            }
+
+            // Return the invoices
+            return response()->json(['status' => true, 'message' => 'Invoices retrieved successfully.', 'data' => $invoices], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve invoices.', 'error' => $e->getMessage()], 500);
         }
+    }
+    public function getDetailedInvoice($invoiceId)
+    {
+        try {
+            // Fetch the invoice along with its related items and product details
+            $invoice = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])->find($invoiceId);
 
-        // Apply business_id filter if provided
-        if ($request->has('business_id')) {
-            $query->where('invoices.business_id', $request->business_id);
+            // Check if the invoice is found
+            if (!$invoice) {
+                return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+            }
+
+            // Return the detailed invoice
+            return response()->json(['status' => true, 'message' => 'Invoice details retrieved successfully.', 'data' => $invoice], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve invoice details.', 'error' => $e->getMessage()], 500);
         }
+    }
 
-        // Apply location_id filter if provided
-        if ($request->has('location_id')) {
-            $query->where('invoices.location_id', $request->location_id);
-        }
+    public function getDetailedInvoiceWeb($invoiceId)
+    {
+        try {
+            // Fetch the invoice along with its related items, product details, and addresses
+            $invoice = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
+                ->leftJoin('businessses', 'invoices.business_id', '=', 'businessses.id')
+                ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
+                ->select(
+                    'invoices.*',
+                    'businessses.gst as business_gst',
+                    'businessses.business_name as business_name',
+                    'businessses.logo as business_logo',
+                    'locations.location_name',
+                    'locations.address as location_address',
+                    'locations.state as location_state',
+                    'locations.email as location_email',
+                    'locations.phone as location_phone',
+                    'locations.alternate_phone as location_alternate_phone'
+                )
+                ->find($invoiceId);
 
-        // Execute the query and get the results
-        $invoices = $query->get();
+            // Check if the invoice is found
+            if (!$invoice) {
+                return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+            }
 
-        // Check if any invoices are found
-        if ($invoices->isEmpty()) {
-            return response()->json(['status' => false, 'message' => 'No invoices found matching the criteria.'], 404);
-        }
+            // Fetch bank details for the business and location
+            $bankDetails = DB::table('banks')
+                ->where('business_id', $invoice->business_id)
+                ->where('location_id', $invoice->location_id)
+                ->first();
 
-        // Process each invoice to add business_info
-        $processedInvoices = $invoices->map(function ($invoice) {
-            $invoice->business_info = [
-                'name' => $invoice->location_name ?? 'InvoiceMate',
+            // Prepare business and location info
+            $businessInfo = [
+                'name' => $invoice->business_name ?? 'InvoiceMate',
                 'address' => $invoice->location_address ?? 'Shop No: 28 Kirti Nagar Furniture Block, Kirti Nagar, New Delhi – 110015',
                 'phone' => $invoice->location_phone ?? '+91- 9868 200 002',
                 'alternate_phone' => $invoice->location_alternate_phone ?? '+91- 9289 388 374',
-                'gst' => $invoice->business_gst ?? '07AADPA2039E1ZF'
+                'gst' => $invoice->business_gst ?? '07AADPA2039E1ZF',
+                'logo' => $invoice->business_logo ?? null
             ];
-            
-            // Remove the additional fields from the main invoice object
-            unset($invoice->business_gst, $invoice->location_name, $invoice->location_address, 
-                  $invoice->location_email, $invoice->location_phone, $invoice->location_alternate_phone);
-            
-            return $invoice;
-        });
 
-        // Return the detailed invoices
-        return response()->json([
-            'status' => true, 
-            'message' => 'Invoices retrieved successfully.', 
-            'data' => $processedInvoices
-        ], 200);
+            // Add business info and bank details to the invoice data
+            $invoice->business_info = $businessInfo;
+            $invoice->bank_details = $bankDetails;
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false, 
-            'message' => 'Failed to retrieve invoices.', 
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-    public function removeInvoice($id){
-    try {
-        // Find the invoice by ID
-        $invoice = Invoice::find($id);
+            // Return the detailed invoice
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoice details retrieved successfully.',
+                'data' => $invoice
+            ], 200);
 
-        // If invoice not found, return error
-        if (!$invoice) {
-            return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve invoice details.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Delete the invoice
-        $invoice->delete();
-
-        return response()->json(['status' => true, 'message' => 'Invoice deleted successfully.'], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to delete invoice.', 'error' => $e->getMessage()], 500);
     }
-}
 
-public function cancelInvoice($id){
-    try {
-        // Find the invoice by ID
-        $invoice = Invoice::find($id);
+    public function getBulkInvoicesWeb(Request $request)
+    {
+        try {
+            // Start with a base query
+            $query = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
+                ->leftJoin('businessses', 'invoices.business_id', '=', 'businessses.id')
+                ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
+                ->select(
+                    'invoices.*',
+                    'businessses.gst as business_gst',
+                    'locations.location_name',
+                    'locations.address as location_address',
+                    'locations.email as location_email',
+                    'locations.phone as location_phone',
+                    'locations.alternate_phone as location_alternate_phone'
+                )
+                ->where('invoices.is_completed', 1);
 
-        // If invoice not found, return error
-        if (!$invoice) {
-            return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+            // Apply date range filter if provided
+            if ($request->has('start_date') && $request->has('end_date')) {
+                $query->whereDate('invoices.invoice_date', '>=', $request->start_date)
+                    ->whereDate('invoices.invoice_date', '<=', $request->end_date);
+            }
+
+            // Apply min amount filter if provided
+            if ($request->has('min_amount')) {
+                $query->where('invoices.total_amount', '>=', $request->min_amount);
+            }
+
+            // Apply max amount filter if provided
+            if ($request->has('max_amount')) {
+                $query->where('invoices.total_amount', '<=', $request->max_amount);
+            }
+
+            // Apply type filter if provided
+            if ($request->has('type')) {
+                $query->where('invoices.type', $request->type);
+            }
+
+            // Apply payment mode filter if provided
+            if ($request->has('payment_mode')) {
+                $query->where('invoices.payment_mode', $request->payment_mode);
+            }
+
+            // Apply business_id filter if provided
+            if ($request->has('business_id')) {
+                $query->where('invoices.business_id', $request->business_id);
+            }
+
+            // Apply location_id filter if provided
+            if ($request->has('location_id')) {
+                $query->where('invoices.location_id', $request->location_id);
+            }
+
+            // Execute the query and get the results
+            $invoices = $query->get();
+
+            // Check if any invoices are found
+            if ($invoices->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'No invoices found matching the criteria.'], 404);
+            }
+
+            // Process each invoice to add business_info
+            $processedInvoices = $invoices->map(function ($invoice) {
+                $invoice->business_info = [
+                    'name' => $invoice->location_name ?? 'InvoiceMate',
+                    'address' => $invoice->location_address ?? 'Shop No: 28 Kirti Nagar Furniture Block, Kirti Nagar, New Delhi – 110015',
+                    'phone' => $invoice->location_phone ?? '+91- 9868 200 002',
+                    'alternate_phone' => $invoice->location_alternate_phone ?? '+91- 9289 388 374',
+                    'gst' => $invoice->business_gst ?? '07AADPA2039E1ZF'
+                ];
+
+                // Remove the additional fields from the main invoice object
+                unset(
+                    $invoice->business_gst,
+                    $invoice->location_name,
+                    $invoice->location_address,
+                    $invoice->location_email,
+                    $invoice->location_phone,
+                    $invoice->location_alternate_phone
+                );
+
+                return $invoice;
+            });
+
+            // Return the detailed invoices
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoices retrieved successfully.',
+                'data' => $processedInvoices
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve invoices.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Delete the invoice
-        $invoice->is_cancelled = 1;
-        $invoice->save();
-
-        return response()->json(['status' => true, 'message' => 'Invoice cancelled successfully.'], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to delete invoice.', 'error' => $e->getMessage()], 500);
     }
-}
-public function editInvoice(Request $request)
-{
-    $rules = [
-        'id' => 'required|exists:invoices,id'
-    ];
+    public function removeInvoice($id)
+    {
+        try {
+            // Find the invoice by ID
+            $invoice = Invoice::find($id);
 
-    $validator = Validator::make($request->all(), $rules);
+            // If invoice not found, return error
+            if (!$invoice) {
+                return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+            }
 
-    if ($validator->fails()) {
-        return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+            // Delete the invoice
+            $invoice->delete();
+
+            return response()->json(['status' => true, 'message' => 'Invoice deleted successfully.'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to delete invoice.', 'error' => $e->getMessage()], 500);
+        }
     }
 
-    try {
-        DB::beginTransaction();
+    public function cancelInvoice($id)
+    {
+        try {
+            // Find the invoice by ID
+            $invoice = Invoice::find($id);
 
-        $invoice = Invoice::findOrFail($request->id);
+            // If invoice not found, return error
+            if (!$invoice) {
+                return response()->json(['status' => false, 'message' => 'Invoice not found.'], 404);
+            }
 
-        $updatableFields = [
-            'name', 'mobile_number', 'customer_type', 'doc_type', 'doc_no',
-            'business_id', 'location_id', 'payment_mode', 'billing_address_id',
-            'shipping_address_id', 'is_completed', 'invoice_date', 'full_paid', 'total_paid'
+            // Delete the invoice
+            $invoice->is_cancelled = 1;
+            $invoice->save();
+
+            return response()->json(['status' => true, 'message' => 'Invoice cancelled successfully.'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to delete invoice.', 'error' => $e->getMessage()], 500);
+        }
+    }
+    public function editInvoice(Request $request)
+    {
+        $rules = [
+            'id' => 'required|exists:invoices,id'
         ];
 
-        $updateData = $request->only($updatableFields);
-        
-        // Convert doc_no to uppercase if it exists in the request
-        if (isset($updateData['doc_no'])) {
-            $updateData['doc_no'] = strtoupper($updateData['doc_no']);
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
         }
 
-        $invoice->fill($updateData);
+        try {
+            DB::beginTransaction();
+
+            $invoice = Invoice::findOrFail($request->id);
+
+            $updatableFields = [
+                'name',
+                'mobile_number',
+                'customer_type',
+                'doc_type',
+                'doc_no',
+                'business_id',
+                'location_id',
+                'payment_mode',
+                'billing_address_id',
+                'shipping_address_id',
+                'is_completed',
+                'invoice_date',
+                'full_paid',
+                'total_paid'
+            ];
+
+            $updateData = $request->only($updatableFields);
+
+            // Convert doc_no to uppercase if it exists in the request
+            if (isset($updateData['doc_no'])) {
+                $updateData['doc_no'] = strtoupper($updateData['doc_no']);
+            }
+
+            $invoice->fill($updateData);
+            $invoice->save();
+
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoice updated successfully.',
+                'data' => $invoice
+            ], 200);
+
+        } catch (ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Invoice not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update invoice.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function addProduct(Request $request)
+    {
+        $rules = [
+            'invoice_id' => 'required|exists:invoices,id',
+            'name' => 'required',
+            'price' => 'required|numeric|min:0',
+            'quantity' => 'required|integer|min:1',
+
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $invoice = Invoice::findOrFail($request->invoice_id);
+            if (!empty($request->product_id) && $request->product_id !== null && $request->product_id !== "null") {
+                // Add debugging to see what product_id is being passed
+                \Log::info('Looking for product with ID: ' . $request->product_id);
+                $product = Product::find($request->product_id);
+                if (!$product) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Product not found with ID: ' . $request->product_id
+                    ], 404);
+                }
+
+                if ($product->is_temp == 0) {
+                    $product->quantity = max($product->quantity - $request->quantity, 0);
+                    $product->save();
+                }
+            } else {
+                if (empty($request->name)) {
+                    return response()->json(['status' => false, 'message' => 'Product name is required when product_id is not provided.'], 422);
+                }
+                $hsnCode = (!empty($request->hsn_code) && $request->hsn_code !== "null") ? $request->hsn_code : null;
+                $product = $this->getOrCreateProduct($hsnCode, $request->name, $request->category_id, $request->quantity, $invoice);
+            }
+            $address = Addres::where('invoice_id', $request->invoice_id)->first();
+            $business_location = Locations::findOrFail($invoice->location_id);
+            $state = $business_location->state;
+            $item = new Item();
+            $item->product_id = $product->id;
+            $item->invoice_id = $request->invoice_id;
+            $item->quantity = $request->quantity;
+            $item->is_gst = $request->is_gst;
+            $item->gst_rate = $request->gst_percent;
+            $item->category_id = $request->category_id;
+
+
+            $this->calculateItemPrice($item, $invoice, $request->price, $request->is_gst);
+            $this->calculateGST($item, $address, $state, $invoice->type);
+
+            $item->price_of_all = $this->calculateTotalPrice($item);
+            $item->save();
+
+            $this->updateInvoiceTotals($invoice, $item);
+
+            DB::commit();
+            $formattedItem = $this->formatItemResponse($item, $invoice);
+            return response()->json([
+                'status' => true,
+                'message' => 'Product added successfully.',
+                'data' => $formattedItem
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['status' => false, 'message' => 'Failed to add product.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    private function getOrCreateProduct($hsnCode, $name, $category_id, $quantity, $invoice)
+    {
+        $product = new Product();
+        $product->hsn_code = $hsnCode ?? null;
+        $product->name = $name;
+        $product->business_id = $invoice->business_id;
+        $product->location_id = $invoice->location_id;
+
+        if (!empty($category_id) && $category_id !== "null") {
+            $product->category_id = $category_id;
+        }
+
+        if (!empty($quantity) && is_numeric($quantity)) {
+            $product->quantity = $quantity;
+        }
+
+        $product->save();
+
+        return $product;
+    }
+
+    private function calculateItemPrice(Item $item, Invoice $invoice, $price, $isGst)
+    {
+        if ($invoice->type == 'normal' && $isGst) {
+            // Use dynamic GST rate instead of hardcoded 18%
+            $gstMultiplier = 1 + ($item->gst_rate / 100);
+            $item->price_of_one = round($price / $gstMultiplier, 2);
+        } else {
+            $item->price_of_one = $price;
+        }
+    }
+
+    private function calculateGST(Item $item, ?Addres $address, $state, $invoiceType)
+    {
+        if ($invoiceType == 'normal') {
+            $basePrice = $item->price_of_one * $item->quantity;
+            $isDelhi = $address && strtolower($address->state) == strtolower($state);
+
+            // Use the dynamic GST rate from the item
+            $gstRate = $item->gst_rate / 100; // Convert percentage to decimal
+            $cgstDgstRate = $gstRate / 2; // Split GST rate equally between CGST and DGST
+
+            if ($isDelhi) {
+                $item->dgst = $item->cgst = round($cgstDgstRate * $basePrice, 2);
+                $item->igst = 0;
+            } else {
+                $item->dgst = $item->cgst = 0;
+                $item->igst = round($gstRate * $basePrice, 2);
+            }
+        } else {
+            $item->dgst = $item->cgst = $item->igst = 0;
+        }
+    }
+
+    private function calculateTotalPrice(Item $item)
+    {
+        return round($item->price_of_one * $item->quantity + $item->dgst + $item->cgst + $item->igst, 2);
+    }
+
+    private function updateInvoiceTotals(Invoice $invoice, Item $item)
+    {
+        $invoice->total_dgst += $item->dgst;
+        $invoice->total_cgst += $item->cgst;
+        $invoice->total_igst += $item->igst;
+        $invoice->total_amount += $item->price_of_all;
         $invoice->save();
-
-        DB::commit();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Invoice updated successfully.',
-            'data' => $invoice
-        ], 200);
-
-    } catch (ModelNotFoundException $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false,
-            'message' => 'Invoice not found.',
-        ], 404);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false,
-            'message' => 'Failed to update invoice.',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-
-
-public function addProduct(Request $request)
-{
-    $rules = [
-        'invoice_id' => 'required|exists:invoices,id',
-        'name' => 'required',
-        'price' => 'required|numeric|min:0',
-        'quantity' => 'required|integer|min:1',
-     
-    ];
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
     }
 
-    try {
-        DB::beginTransaction();
+    private function formatItemResponse(Item $item, Invoice $invoice)
+    {
+        return array_merge(
+            $item->toArray(),
+            [
+                't_dgst' => round($invoice->total_dgst, 2),
+                't_cgst' => round($invoice->total_cgst, 2),
+                't_igst' => round($invoice->total_igst, 2),
+                'total_amount' => round($invoice->total_amount, 2),
+                'total_ex_gst_amount' => round($invoice->total_amount - $invoice->total_dgst - $invoice->total_cgst - $invoice->total_igst, 2),
+            ]
+        );
+    }
+    public function getItemsByInvoiceId(Request $request)
+    {
+        // Validation rules for invoice ID
+        $rules = [
+            'invoice_id' => 'required|exists:invoices,id',
+        ];
 
-        $invoice = Invoice::findOrFail($request->invoice_id);
-        if (!empty($request->product_id) && $request->product_id !== null && $request->product_id !== "null"){
-            // Add debugging to see what product_id is being passed
-            \Log::info('Looking for product with ID: ' . $request->product_id);
-            $product = Product::find($request->product_id);
-            if (!$product) {
-                return response()->json([
-                    'status' => false, 
-                    'message' => 'Product not found with ID: ' . $request->product_id
-                ], 404);
+        // Validate the incoming request
+        $validator = Validator::make($request->all(), $rules);
+
+        // If validation fails, return errors
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            // Fetch items associated with the provided invoice ID
+            $items = Item::where('invoice_id', $request->invoice_id)->get();
+
+            // Check if any items are found
+            if ($items->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'No items found for the provided invoice ID.'], 404);
             }
 
-            if ($product->is_temp == 0) {
-                $product->quantity = max($product->quantity - $request->quantity, 0);
+            // Return the items
+            return response()->json(['status' => true, 'message' => 'Items retrieved successfully.', 'data' => $items], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve items.', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function editProduct(Request $request)
+    {
+        // Validation rules for updating item
+        $rules = [
+            'hsn_code' => 'required',
+            'name' => 'required',
+            'price' => 'required',
+            'quantity' => 'required',
+            'item_id' => 'required',
+        ];
+
+        // Validate the incoming request
+        $validator = Validator::make($request->all(), $rules);
+
+        // If validation fails, return errors
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            // Find the item by its ID
+            $item = Item::findOrFail($request->item_id);
+
+            // Find or create the product based on HSN code
+            if ($product = Product::where('hsn_code', $request->hsn_code)->first()) {
+                $item->product_id = $product->id;
+            } else {
+                $product = new Product();
+                $product->name = $request->name;
+                $product->hsn_code = $request->hsn_code;
                 $product->save();
+                $item->product_id = $product->id;
             }
-        } else {
-            if (empty($request->name)) {
-                return response()->json(['status' => false, 'message' => 'Product name is required when product_id is not provided.'], 422);
-            }
-            $hsnCode = (!empty($request->hsn_code) && $request->hsn_code !== "null") ? $request->hsn_code : null;
-            $product = $this->getOrCreateProduct($hsnCode, $request->name, $request->category_id, $request->quantity, $invoice);
-        }
-        $address = Addres::where('invoice_id', $request->invoice_id)->first();
-        $business_location = Locations::findOrFail($invoice->location_id);
-        $state = $business_location->state;
-        $item = new Item();
-        $item->product_id = $product->id;
-        $item->invoice_id = $request->invoice_id;
-        $item->quantity = $request->quantity;
-        $item->is_gst = $request->is_gst;
-        $item->gst_rate = $request->gst_percent;
-        $item->category_id = $request->category_id;
 
-
-        $this->calculateItemPrice($item, $invoice, $request->price, $request->is_gst);
-        $this->calculateGST($item, $address,$state, $invoice->type);
-
-        $item->price_of_all = $this->calculateTotalPrice($item);
-        $item->save();
-
-        $this->updateInvoiceTotals($invoice, $item);
-
-        DB::commit();
-        $formattedItem = $this->formatItemResponse($item, $invoice);
-        return response()->json([
-            'status' => true,
-            'message' => 'Product added successfully.',
-            'data' => $formattedItem
-        ], 201);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json(['status' => false, 'message' => 'Failed to add product.', 'error' => $e->getMessage()], 500);
-    }
-}
-
-private function getOrCreateProduct($hsnCode, $name, $category_id, $quantity, $invoice)
-{
-    $product = new Product();
-    $product->hsn_code = $hsnCode ?? null;
-    $product->name = $name;
-    $product->business_id = $invoice->business_id;
-    $product->location_id = $invoice->location_id;
-
-    if (!empty($category_id) && $category_id !== "null") {
-        $product->category_id = $category_id;
-    }
-
-    if (!empty($quantity) && is_numeric($quantity)) {
-        $product->quantity = $quantity;
-    }
-
-    $product->save();
-
-    return $product;
-}
-
-private function calculateItemPrice(Item $item, Invoice $invoice, $price, $isGst)
-{
-    if ($invoice->type == 'normal' && $isGst) {
-        // Use dynamic GST rate instead of hardcoded 18%
-        $gstMultiplier = 1 + ($item->gst_rate / 100);
-        $item->price_of_one = round($price / $gstMultiplier, 2);
-    } else {
-        $item->price_of_one = $price;
-    }
-}
-
-private function calculateGST(Item $item, ?Addres $address, $state, $invoiceType)
-{
-    if ($invoiceType == 'normal') {
-        $basePrice = $item->price_of_one * $item->quantity;
-        $isDelhi = $address && strtolower($address->state) == strtolower($state);
-        
-        // Use the dynamic GST rate from the item
-        $gstRate = $item->gst_rate / 100; // Convert percentage to decimal
-        $cgstDgstRate = $gstRate / 2; // Split GST rate equally between CGST and DGST
-
-        if ($isDelhi) {
-            $item->dgst = $item->cgst = round($cgstDgstRate * $basePrice, 2);
-            $item->igst = 0;
-        } else {
-            $item->dgst = $item->cgst = 0;
-            $item->igst = round($gstRate * $basePrice, 2);
-        }
-    } else {
-        $item->dgst = $item->cgst = $item->igst = 0;
-    }
-}
-
-private function calculateTotalPrice(Item $item)
-{
-    return round($item->price_of_one * $item->quantity + $item->dgst + $item->cgst + $item->igst, 2);
-}
-
-private function updateInvoiceTotals(Invoice $invoice, Item $item)
-{
-    $invoice->total_dgst += $item->dgst;
-    $invoice->total_cgst += $item->cgst;
-    $invoice->total_igst += $item->igst;
-    $invoice->total_amount += $item->price_of_all;
-    $invoice->save();
-}
-
-private function formatItemResponse(Item $item, Invoice $invoice) {
-    return array_merge(
-        $item->toArray(),
-        [
-            't_dgst' => round($invoice->total_dgst, 2),
-            't_cgst' => round($invoice->total_cgst, 2),
-            't_igst' => round($invoice->total_igst, 2),
-            'total_amount' => round($invoice->total_amount, 2),
-            'total_ex_gst_amount' => round($invoice->total_amount - $invoice->total_dgst - $invoice->total_cgst - $invoice->total_igst, 2),
-        ]
-    );
-}
-    public function getItemsByInvoiceId(Request $request){
-    // Validation rules for invoice ID
-    $rules = [
-        'invoice_id' => 'required|exists:invoices,id',
-    ];
-
-    // Validate the incoming request
-    $validator = Validator::make($request->all(), $rules);
-
-    // If validation fails, return errors
-    if ($validator->fails()) {
-        return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
-    }
-
-    try {
-        // Fetch items associated with the provided invoice ID
-        $items = Item::where('invoice_id', $request->invoice_id)->get();
-
-        // Check if any items are found
-        if ($items->isEmpty()) {
-            return response()->json(['status' => false, 'message' => 'No items found for the provided invoice ID.'], 404);
-        }
-
-        // Return the items
-        return response()->json(['status' => true, 'message' => 'Items retrieved successfully.', 'data' => $items], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to retrieve items.', 'error' => $e->getMessage()], 500);
-    }
-}
-
-    public function editProduct(Request $request){
-    // Validation rules for updating item
-    $rules = [
-        'hsn_code' => 'required',
-        'name' => 'required',
-        'price' => 'required',
-        'quantity' => 'required',
-        'item_id' => 'required',
-    ];
-
-    // Validate the incoming request
-    $validator = Validator::make($request->all(), $rules);
-
-    // If validation fails, return errors
-    if ($validator->fails()) {
-        return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
-    }
-
-    try {
-        // Find the item by its ID
-        $item = Item::findOrFail($request->item_id);
-
-        // Find or create the product based on HSN code
-        if ($product = Product::where('hsn_code', $request->hsn_code)->first()) {
-            $item->product_id = $product->id;
-        } else {
-            $product = new Product();
-            $product->name = $request->name;
-            $product->hsn_code = $request->hsn_code;
-            $product->save();
-            $item->product_id = $product->id;
-        }
-
-        // Update item details
-        $item->quantity = $request->quantity;
-        if($request->is_gst==1){
-            $item->price_of_one = $request->price;
-        }else{
-            $item->price_of_one = $request->price/1.18;
-        }
-        $address = Addres::where('invoice_id', $request->invoice_id)->first();
-        // Calculate GST based on whether it's inclusive or exclusive
-        if($request->type=='normal'){
-                  if ($request->is_gst == 1) {
-            // Inclusive GST
-            // Check if the address place is Delhi
-           
-            if ($address->state == 'delhi') {
-                $item->dgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
-                $item->cgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
-                $item->igst = 0; // No IGST for Delhi
+            // Update item details
+            $item->quantity = $request->quantity;
+            if ($request->is_gst == 1) {
+                $item->price_of_one = $request->price;
             } else {
-                $item->dgst = 0; // No DGST for other states
-                $item->cgst = 0; // No CGST for other states
-                $item->igst = (0.18 * $item->price_of_one) * $request->quantity; // 18% IGST for other states
+                $item->price_of_one = $request->price / 1.18;
             }
-        } else {
-            // Exclusive GST
-            if ($address->state == 'delhi') {
-                $item->dgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
-                $item->cgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
-                $item->igst = 0; // No IGST for Delhi
-            } else {
-                $item->dgst = 0; // No DGST for other states
-                $item->cgst = 0; // No CGST for other states
-                $item->igst = (0.18 * $item->price_of_one) * $request->quantity; // 18% IGST for other states
-            }
-        }
-            
-        }else if($request->type=='performa'){
-             $item->dgst = 0;
+            $address = Addres::where('invoice_id', $request->invoice_id)->first();
+            // Calculate GST based on whether it's inclusive or exclusive
+            if ($request->type == 'normal') {
+                if ($request->is_gst == 1) {
+                    // Inclusive GST
+                    // Check if the address place is Delhi
+
+                    if ($address->state == 'delhi') {
+                        $item->dgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
+                        $item->cgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
+                        $item->igst = 0; // No IGST for Delhi
+                    } else {
+                        $item->dgst = 0; // No DGST for other states
+                        $item->cgst = 0; // No CGST for other states
+                        $item->igst = (0.18 * $item->price_of_one) * $request->quantity; // 18% IGST for other states
+                    }
+                } else {
+                    // Exclusive GST
+                    if ($address->state == 'delhi') {
+                        $item->dgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
+                        $item->cgst = (0.09 * $item->price_of_one) * $request->quantity; // 9% GST for Delhi
+                        $item->igst = 0; // No IGST for Delhi
+                    } else {
+                        $item->dgst = 0; // No DGST for other states
+                        $item->cgst = 0; // No CGST for other states
+                        $item->igst = (0.18 * $item->price_of_one) * $request->quantity; // 18% IGST for other states
+                    }
+                }
+
+            } else if ($request->type == 'performa') {
+                $item->dgst = 0;
                 $item->cgst = 0;
                 $item->igst = 0;
-            
+
+            }
+
+
+            // Calculate total price of the item
+            $item->price_of_all = $item->price_of_one * $request->quantity + $item->dgst + $item->cgst + $item->igst;
+            $update_main = Invoice::find($request->invoice_id);
+            $update_main->total_dgst = $update_main->total_dgst + $item->dgst;
+            $update_main->total_cgst = $update_main->total_cgst + $item->cgst;
+            $update_main->total_igst = $update_main->total_igst + $item->igst;
+            $update_main->total_amount = $update_main->total_amount + $item->price_of_all;
+            $update_main->save();
+            // Save the updated item
+            $item->save();
+
+            return response()->json(['status' => true, 'message' => 'Item updated successfully.', 'data' => $item], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to update item.', 'error' => $e->getMessage()], 500);
         }
-  
-
-        // Calculate total price of the item
-        $item->price_of_all = $item->price_of_one * $request->quantity + $item->dgst + $item->cgst + $item->igst;
-        $update_main = Invoice::find($request->invoice_id);
-        $update_main->total_dgst = $update_main->total_dgst+$item->dgst;
-        $update_main->total_cgst = $update_main->total_cgst+$item->cgst;
-        $update_main->total_igst = $update_main->total_igst+$item->igst;
-        $update_main->total_amount = $update_main->total_amount + $item->price_of_all;
-        $update_main->save();
-        // Save the updated item
-        $item->save();
-        
-        return response()->json(['status' => true, 'message' => 'Item updated successfully.', 'data' => $item], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to update item.', 'error' => $e->getMessage()], 500);
-    }
-}
-
-public function removeItem($item_id)
-{
-    try {
-        DB::beginTransaction();
-
-        $item = Item::findOrFail($item_id);
-        $invoice = Invoice::findOrFail($item->invoice_id);
-
-        // Update the main invoice totals
-        $invoice->total_dgst -= $item->dgst;
-        $invoice->total_cgst -= $item->cgst;
-        $invoice->total_igst -= $item->igst;
-        $invoice->total_amount -= $item->price_of_all;
-
-        $invoice->save();
-
-        // Delete the item
-        $item->delete();
-
-        DB::commit();
-
-        // Create response data with rounded values
-        $response_data = new \stdClass();
-        $response_data->t_dgst = round($invoice->total_dgst, 2);
-        $response_data->t_cgst = round($invoice->total_cgst, 2);
-        $response_data->t_igst = round($invoice->total_igst, 2);
-        $response_data->total_amount = round($invoice->total_amount, 2);
-        $response_data->total_ex_gst_amount = round($invoice->total_amount - $invoice->total_dgst - $invoice->total_cgst - $invoice->total_igst, 2);
-
-        return response()->json([
-            'status' => true, 
-            'message' => 'Item removed successfully.', 
-            'data' => $response_data
-        ], 200);
-
-    } catch (ModelNotFoundException $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false, 
-            'message' => $e->getMessage()
-        ], 404);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false, 
-            'message' => 'Failed to remove item.', 
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-
-    public function addAddress(Request $request){
-    $rules = [
-        'state' => 'required',
-        'invoice_id' => 'required',
-        'type' => 'required',
-    ];
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return $validator->errors();
     }
 
-    try {
-        if(Addres::where('invoice_id', $request->invoice_id)->where('type',$request->type)->first()){
-            $location = Addres::where('invoice_id', $request->invoice_id)->where('type',$request->type)->first();
-            $location->type = $request->type;
-            $location->address_1 = $request->address_1;
-            $location->address_2 = $request->address_2;
-            $location->city = $request->city;
-            $location->state = $request->state;
-            $location->pincode = $request->pincode;
-            $location->save();
-        }else{
-            $location = new Addres();
-            $location->invoice_id = $request->invoice_id;
-            $location->type = $request->type;
-            $location->address_1 = $request->address_1;
-            $location->address_2 = $request->address_2;
-            $location->city = $request->city;
-            $location->state = $request->state;
-            $location->pincode = $request->pincode;
-            $location->save();
-             
+    public function removeItem($item_id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $item = Item::findOrFail($item_id);
+            $invoice = Invoice::findOrFail($item->invoice_id);
+
+            // Update the main invoice totals
+            $invoice->total_dgst -= $item->dgst;
+            $invoice->total_cgst -= $item->cgst;
+            $invoice->total_igst -= $item->igst;
+            $invoice->total_amount -= $item->price_of_all;
+
+            $invoice->save();
+
+            // Delete the item
+            $item->delete();
+
+            DB::commit();
+
+            // Create response data with rounded values
+            $response_data = new \stdClass();
+            $response_data->t_dgst = round($invoice->total_dgst, 2);
+            $response_data->t_cgst = round($invoice->total_cgst, 2);
+            $response_data->t_igst = round($invoice->total_igst, 2);
+            $response_data->total_amount = round($invoice->total_amount, 2);
+            $response_data->total_ex_gst_amount = round($invoice->total_amount - $invoice->total_dgst - $invoice->total_cgst - $invoice->total_igst, 2);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Item removed successfully.',
+                'data' => $response_data
+            ], 200);
+
+        } catch (ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 404);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to remove item.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-        $update_main = Invoice::find($request->invoice_id);
-             if($request->type==0){
-                 $update_main->billing_address_id = $location->id;
-             }else{
-                  $update_main->shipping_address_id = $location->id;
-             }
-             $update_main->save();
-        
-        
+    }
+
+    public function addAddress(Request $request)
+    {
+        $rules = [
+            'state' => 'required',
+            'invoice_id' => 'required',
+            'type' => 'required',
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return $validator->errors();
+        }
+
+        try {
+            if (Addres::where('invoice_id', $request->invoice_id)->where('type', $request->type)->first()) {
+                $location = Addres::where('invoice_id', $request->invoice_id)->where('type', $request->type)->first();
+                $location->type = $request->type;
+                $location->address_1 = $request->address_1;
+                $location->address_2 = $request->address_2;
+                $location->city = $request->city;
+                $location->state = $request->state;
+                $location->pincode = $request->pincode;
+                $location->save();
+            } else {
+                $location = new Addres();
+                $location->invoice_id = $request->invoice_id;
+                $location->type = $request->type;
+                $location->address_1 = $request->address_1;
+                $location->address_2 = $request->address_2;
+                $location->city = $request->city;
+                $location->state = $request->state;
+                $location->pincode = $request->pincode;
+                $location->save();
+
+            }
+            $update_main = Invoice::find($request->invoice_id);
+            if ($request->type == 0) {
+                $update_main->billing_address_id = $location->id;
+            } else {
+                $update_main->shipping_address_id = $location->id;
+            }
+            $update_main->save();
+
+
+            return response([
+                'status' => true,
+                'message' => 'Adress created/Updated successfully.',
+                'data' => $location
+            ], 200);
+        } catch (\Exception $e) {
+            return response([
+                'status' => false,
+                'message' => 'Failed to insert location.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    private function getFileExtension($base64Data)
+    {
+        $fileInfo = explode(';base64,', $base64Data);
+        $mime = str_replace('data:', '', $fileInfo[0]);
+        $extension = explode('/', $mime)[1];
+        return $extension;
+    }
+    public function addExpense(Request $request)
+    {
+        $rules = [
+            'name' => 'required',
+            'amount' => 'required',
+            'type' => 'required',
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return $validator->errors();
+        }
+
+        try {
+            if ($expense = Expenses::find($request->id)) {
+                $expense->name = $request->name;
+                $expense->amount = $request->amount;
+                $expense->type = $request->type;
+                $expense->business_id = $request->business_id;
+                $expense->location_id = $request->location_id;
+                $expense->user_id = $request->user_id;
+                $expense->save();
+                $expense->find($expense->id);
+                if ($request->has('file')) {
+                    $fileData = $request->file; // base64 encoded file data
+                    $fileName = 'expense_' . time() . '.' . $this->getFileExtension($fileData) . '.' . $request->extension;
+                    $filePath = 'public/expense/' . $fileName;
+                    \Storage::put($filePath, base64_decode($fileData));
+                    $expense->file = $filePath;
+                }
+
+                $expense->save();
+            } else {
+                $expense = new Expenses();
+                $expense->name = $request->name;
+                $expense->amount = $request->amount;
+                $expense->type = $request->type;
+                $expense->business_id = $request->business_id;
+                $expense->location_id = $request->location_id;
+                $expense->user_id = $request->user_id;
+                $expense->save();
+                $expense->find($expense->id);
+                if ($request->has('file')) {
+                    $fileData = $request->file; // base64 encoded file data
+                    $fileName = 'expense_' . $expense->id . '.' . $request->extension;
+                    $filePath = 'public/expense/' . $fileName;
+                    \Storage::put($filePath, base64_decode($fileData));
+                    $expense->file = $filePath;
+                }
+                $expense->save();
+            }
+
+            return response([
+                'status' => true,
+                'message' => 'Expense created/Updated successfully.',
+                'data' => $expense
+            ], 200);
+        } catch (\Exception $e) {
+            return response([
+                'status' => false,
+                'message' => 'Failed to insert expense.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getAllExpenses(Request $request)
+    {
+        $query = Expenses::query();
+
+        // Filter by day
+        if ($request->has('day')) {
+            $query->whereDate('created_at', $request->day);
+        }
+
+        // Filter by month
+        if ($request->has('month')) {
+            $query->whereMonth('created_at', $request->month);
+        }
+
+        // Apply payment mode filter if provided
+        if ($request->has('business_id')) {
+            $query->where('business_id', $request->business_id);
+        }
+        // Apply payment mode filter if provided
+        if ($request->has('location_id')) {
+            $query->where('location_id', $request->location_id);
+        }
+
+        // Filter by week
+        if ($request->has('week_start')) {
+            // Assuming the week is passed as an array with start and end dates
+            $query->whereBetween('created_at', [$request->week_start, $request->week_end]);
+        }
+
+        // Filter by year
+        if ($request->has('year')) {
+            $query->whereYear('created_at', $request->year);
+        }
+
+        // Filter by expense type (0 or 1)
+        if ($request->has('type')) {
+            $type = $request->type;
+            $query->where('type', $type);
+        }
+
+        // Filter by name
+        if ($request->has('name')) {
+            $name = $request->name;
+            $query->where('name', 'like', '%' . $name . '%');
+        }
+
+        // Filter by amount range
+        if ($request->has('amount_min') && $request->has('amount_max')) {
+            $amountMin = $request->amount_min;
+            $amountMax = $request->amount_max;
+            $query->whereBetween('amount', [$amountMin, $amountMax]);
+        }
+
+        if ($request->has('expense_id')) {
+            $query->where('id', $request->expense_id);
+        }
+
+        // Order by id in descending order
+        $query->orderBy('id', 'DESC');
+
+
+        $expenses = $query->get();
+
         return response([
             'status' => true,
-            'message' => 'Adress created/Updated successfully.',
-            'data' => $location
+            'data' => $expenses,
+            'message' => "Data Feteched."
         ], 200);
-    } catch (\Exception $e) {
-        return response([
-            'status' => false,
-            'message' => 'Failed to insert location.',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-private function getFileExtension($base64Data) {
-    $fileInfo = explode(';base64,', $base64Data);
-    $mime = str_replace('data:', '', $fileInfo[0]);
-    $extension = explode('/', $mime)[1];
-    return $extension;
-}
-public function addExpense(Request $request){
-    $rules = [
-        'name' => 'required',
-        'amount' => 'required',
-        'type' => 'required',
-    ];
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return $validator->errors();
     }
 
-    try {
-        if($expense = Expenses::find($request->id)){
-            $expense->name = $request->name;
-            $expense->amount = $request->amount;
-            $expense->type = $request->type;
-            $expense->business_id = $request->business_id;
-            $expense->location_id = $request->location_id;
-            $expense->user_id = $request->user_id;
-            $expense->save();
-            $expense->find($expense->id);
-            if ($request->has('file')) {
-                $fileData = $request->file; // base64 encoded file data
-                $fileName = 'expense_' . time() . '.' . $this->getFileExtension($fileData).'.'.$request->extension;
-                $filePath = 'public/expense/' . $fileName;
-                \Storage::put($filePath, base64_decode($fileData));
-                $expense->file = $filePath;
-            }
-    
-            $expense->save();
+
+    // Get expense by ID
+    public function getExpenseById($id)
+    {
+        $expense = Expenses::find($id);
+        if ($expense) {
+            return response([
+                'status' => true,
+                'data' => $expense
+            ], 200);
         } else {
-            $expense = new Expenses();
-            $expense->name = $request->name;
-            $expense->amount = $request->amount;
-            $expense->type = $request->type;
-            $expense->business_id = $request->business_id;
-            $expense->location_id = $request->location_id;
-            $expense->user_id = $request->user_id;
-            $expense->save();
-            $expense->find($expense->id);
-            if ($request->has('file')) {
-                $fileData = $request->file; // base64 encoded file data
-                $fileName = 'expense_'.$expense->id.'.'.$request->extension;
-                $filePath = 'public/expense/' . $fileName;
-                \Storage::put($filePath, base64_decode($fileData));
-                $expense->file = $filePath;
+            return response([
+                'status' => false,
+                'message' => 'Expense not found.'
+            ], 404);
+        }
+    }
+
+    // Delete expense by ID
+    public function deleteExpense(Request $request)
+    {
+        $expense = Expenses::find($request->id);
+        if ($expense) {
+            $expense->delete();
+            return response([
+                'status' => true,
+                'message' => 'Expense deleted successfully.'
+            ], 200);
+        } else {
+            return response([
+                'status' => false,
+                'message' => 'Expense not found.'
+            ], 404);
+        }
+    }
+
+    public function getAddressByInvoiceId(Request $request)
+    {
+        // Validation rules for invoice ID
+        $rules = [
+            'invoice_id' => 'required|exists:addres,invoice_id',
+        ];
+
+        // Validate the incoming request
+        $validator = Validator::make($request->all(), $rules);
+
+        // If validation fails, return errors
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            // Fetch the address associated with the provided invoice ID
+            $address = Addres::where('invoice_id', $request->invoice_id)->get();
+
+            // Check if the address is found
+            if (!$address) {
+                return response()->json(['status' => false, 'message' => 'No address found for the provided invoice ID.'], 404);
             }
-            $expense->save();
+
+            // Return the address
+            return response()->json(['status' => true, 'message' => 'Address retrieved successfully.', 'data' => $address], 200);
+        } catch (\Exception $e) {
+            return response()->json(['status' => false, 'message' => 'Failed to retrieve address.', 'error' => $e->getMessage()], 500);
         }
-        
-        return response([
-            'status' => true,
-            'message' => 'Expense created/Updated successfully.',
-            'data' => $expense
-        ], 200);
-    } catch (\Exception $e) {
-        return response([
-            'status' => false,
-            'message' => 'Failed to insert expense.',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-public function getAllExpenses(Request $request){
-    $query = Expenses::query();
-
-    // Filter by day
-    if($request->has('day')){
-        $query->whereDate('created_at', $request->day);
     }
 
-    // Filter by month
-    if($request->has('month')){
-        $query->whereMonth('created_at', $request->month);
-    }
-
-      // Apply payment mode filter if provided
-      if ($request->has('business_id')) {
-        $query->where('business_id', $request->business_id);
-    }
-     // Apply payment mode filter if provided
-     if ($request->has('location_id')) {
-        $query->where('location_id', $request->location_id);
-    }
-
-    // Filter by week
-    if($request->has('week_start')){
-        // Assuming the week is passed as an array with start and end dates
-        $query->whereBetween('created_at', [$request->week_start, $request->week_end]);
-    }
-
-    // Filter by year
-    if($request->has('year')){
-        $query->whereYear('created_at', $request->year);
-    }
-
-    // Filter by expense type (0 or 1)
-    if($request->has('type')){
-        $type = $request->type;
-        $query->where('type', $type);
-    }
-
-        // Filter by name
-        if($request->has('name')){
-            $name = $request->name;
-            $query->where('name', 'like', '%' . $name . '%');
-        }
-
-            // Filter by amount range
-    if($request->has('amount_min') && $request->has('amount_max')){
-        $amountMin = $request->amount_min;
-        $amountMax = $request->amount_max;
-        $query->whereBetween('amount', [$amountMin, $amountMax]);
-    } 
-
-    if($request->has('expense_id')){
-        $query->where('id', $request->expense_id);
-    }
-
-        // Order by id in descending order
-        $query->orderBy('id', 'DESC');
-
-
-    $expenses = $query->get();
-
-    return response([
-        'status' => true,
-        'data' => $expenses,
-        'message' => "Data Feteched."
-    ], 200);
-}
-
-
-// Get expense by ID
-public function getExpenseById($id){
-    $expense = Expenses::find($id);
-    if($expense){
-        return response([
-            'status' => true,
-            'data' => $expense
-        ], 200);
-    }else{
-        return response([
-            'status' => false,
-            'message' => 'Expense not found.'
-        ], 404);
-    }
-}
-
-// Delete expense by ID
-public function deleteExpense(Request $request){
-    $expense = Expenses::find($request->id);
-    if($expense){
-        $expense->delete();
-        return response([
-            'status' => true,
-            'message' => 'Expense deleted successfully.'
-        ], 200);
-    }else{
-        return response([
-            'status' => false,
-            'message' => 'Expense not found.'
-        ], 404);
-    }
-}
-
-    public function getAddressByInvoiceId(Request $request){
-    // Validation rules for invoice ID
-    $rules = [
-        'invoice_id' => 'required|exists:addres,invoice_id',
-    ];
-
-    // Validate the incoming request
-    $validator = Validator::make($request->all(), $rules);
-
-    // If validation fails, return errors
-    if ($validator->fails()) {
-        return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
-    }
-
-    try {
-        // Fetch the address associated with the provided invoice ID
-        $address = Addres::where('invoice_id', $request->invoice_id)->get();
-
-        // Check if the address is found
-        if (!$address) {
-            return response()->json(['status' => false, 'message' => 'No address found for the provided invoice ID.'], 404);
-        }
-
-        // Return the address
-        return response()->json(['status' => true, 'message' => 'Address retrieved successfully.', 'data' => $address], 200);
-    } catch (\Exception $e) {
-        return response()->json(['status' => false, 'message' => 'Failed to retrieve address.', 'error' => $e->getMessage()], 500);
-    }
-}
-
-public function getSaleReport(Request $request){
-    $query = Invoice::query();
-
-    // Filter by day
-    if($request->has('day')){
-        $query->whereDate('invoice_date', $request->day);
-    }
-
-    // Filter by month
-    if($request->has('month')){
-        $query->whereMonth('invoice_date', $request->month);
-    }
-
-    // Filter by week
-    if($request->has('week_start')){
-        // Assuming the week is passed as an array with start and end dates
-        $query->whereDate('invoice_date', '>=', $request->week_start)
-              ->whereDate('invoice_date', '<=', $request->week_end);
-    }
-
-    // Filter by year
-    if($request->has('year')){
-        $query->whereYear('invoice_date', $request->year);
-    }
-
-    // Filter by invoice type or performa
-    if($request->has('type')){
-        $Type = $request->type;
-        $query->where('type', $Type);
-    }
-
-    // Filter by name
-    if($request->has('name')){
-        $name = $request->name;
-        $query->where('name', 'like', '%' . $name . '%');
-    }
-
-    // Filter by amount range
-    if($request->has('amount_min') && $request->has('amount_max')){
-        $amountMin = $request->amount_min;
-        $amountMax = $request->amount_max;
-        $query->whereBetween('total_amount', [$amountMin, $amountMax]);
-    }
-
-    // Filter by invoice ID
-    if($request->has('invoice_id')){
-        $query->where('id', $request->invoice_id);
-    }
-
-    // Order by id in descending order
-    $query->orderBy('id', 'DESC');
-
-    // Get the filtered invoices
-    $query->where('is_completed', 1);
-    $invoices = $query->get(['id', 'name', 'total_amount', 'invoice_date', 'type']);
-
-    // Calculate total amount and total transactions
-    $totalAmount = round($invoices->sum('total_amount'),2);
-    $totalTransactions = $invoices->count();
-
-    return response([
-        'status' => true,
-        'total_amount' => $totalAmount,
-        'total_transactions' => $totalTransactions,
-        'data' => $invoices,
-        'message' => "Data fetched."
-    ], 200);
-}
-
-public function getExpenseReport(Request $request){
-    $query = Expenses::query();
-
-    // Filter by day
-    if($request->has('day')){
-        $query->whereDate('created_at', $request->day);
-    }
-
-    // Filter by month
-    if($request->has('month')){
-        $query->whereMonth('created_at', $request->month);
-    }
-
-    // Filter by week
-    if($request->has('week_start')){
-        // Assuming the week is passed as an array with start and end dates
-        $query->whereBetween('created_at', [$request->week_start, $request->week_end]);
-    }
-
-    // Filter by year
-    if($request->has('year')){
-        $query->whereYear('created_at', $request->year);
-    }
-
-    // Filter by expense type (0 or 1)
-    if($request->has('type')){
-        $type = $request->type;
-        $query->where('type', $type);
-    }
-
-        // Filter by name
-        if($request->has('name')){
-            $name = $request->name;
-            $query->where('name', 'like', '%' . $name . '%');
-        }
-
-          // Apply payment mode filter if provided
-     if ($request->has('business_id')) {
-        $query->where('business_id', $request->business_id);
-    }
-     // Apply payment mode filter if provided
-     if ($request->has('location_id')) {
-        $query->where('location_id', $request->location_id);
-    }
-
-            // Filter by amount range
-    if($request->has('amount_min') && $request->has('amount_max')){
-        $amountMin = $request->amount_min;
-        $amountMax = $request->amount_max;
-        $query->whereBetween('amount', [$amountMin, $amountMax]);
-    } 
-
-    if($request->has('expense_id')){
-        $query->where('id', $request->expense_id);
-    }
-
-        // Order by id in descending order
-        $query->orderBy('id', 'DESC');
-
-
-    $expenses = $query->get();
-        // Calculate total amount and total transactions
-        $totalAmount = round($expenses->sum('amount'),2);
-        $totalTransactions = $expenses->count();
-        $params = [];
-
-        if ($request->day) $params[] = "day=" . $request->day;
-        if ($request->month) $params[] = "month=" . $request->month;
-        if ($request->year) $params[] = "year=" . $request->year;
-        if ($request->week_start) $params[] = "week_start=" . $request->week_start;
-        if ($request->week_end) $params[] = "week_end=" . $request->week_end;
-        if ($request->type) $params[] = "type=" . $request->type;
-        if ($request->name) $params[] = "name=" . $request->name;
-        if ($request->amount_min) $params[] = "amount_min=" . $request->amount_min;
-        if ($request->amount_max) $params[] = "amount_max=" . $request->amount_max;
-        if ($request->business_id) $params[] = "business_id=" . $request->business_id;
-        if ($request->location_id) $params[] = "location_id=" . $request->location_id;
-        
-        $query_string = implode("&", $params);
-        
-        $excel = "https://dashboard.invoicemate.in/api/expense-excel.php?" . $query_string;
-        $pdf = "https://dashboard.invoicemate.in/api/expense-pdf.php?" . $query_string;
-    return response([
-        'status' => true,
-        'total_expense' => $totalAmount,
-        'total_transactions' => $totalTransactions,
-        'excel' => $excel,
-        'pdf' => $pdf,
-        'data' => $expenses,
-        'message' => "Data Feteched."
-    ], 200);
-}
-
-public function getPurchaseSaleInvoice(Request $request){
-    $query = Invoice::query();
-
-    // Filter by day
-    if($request->has('day')){
-        $query->whereDate('invoice_date', $request->day);
-    }
-
-    // Filter by month
-    if($request->has('month')){
-        $query->whereMonth('invoice_date', $request->month);
-    }
-
-    // Filter by week
-    if($request->has('week_start')){
-        // Assuming the week is passed as an array with start and end dates
-        $query->whereDate('invoice_date', '>=', $request->week_start)
-              ->whereDate('invoice_date', '<=', $request->week_end);
-    }
-
-    // Filter by year
-    if($request->has('year')){
-        $query->whereYear('invoice_date', $request->year);
-    }
-
-    // Filter by payment mode
-    if($request->has('payment_mode')){
-        $paymentMode = $request->payment_mode;
-        $query->where('payment_mode', $paymentMode);
-    }
-
-    // Filter by invoice type (normal only)
-    $query->where('type', 'normal');
-
-    // Filter by name
-    if($request->has('name')){
-        $name = $request->name;
-        $query->where('name', 'like', '%' . $name . '%');
-    }
-
-    // Filter by amount range
-    if($request->has('amount_min') && $request->has('amount_max')){
-        $amountMin = $request->amount_min;
-        $amountMax = $request->amount_max;
-        $query->whereBetween('total_amount', [$amountMin, $amountMax]);
-    }
-
-    // Filter by invoice ID
-    if($request->has('invoice_id')){
-        $query->where('id', $request->invoice_id);
-    }
-
-    // Ensure only completed invoices are considered
-    $query->where('is_completed', 1);
-
-    // Order by id in descending order
-    $query->orderBy('id', 'DESC');
-
-    // Select only the specified columns
-    $invoices = $query->get(['id', 'name', 'total_amount', 'total_igst', 'total_cgst', 'total_dgst', 'invoice_date', 'type']);
-
-    // Calculate total GST, amount excluding GST, and aggregate totals
-    $totalGST = 0;
-    $totalExcludingGST = 0;
-    foreach ($invoices as $invoice) {
-        $computedTotalGst = $invoice->total_igst + $invoice->total_cgst + $invoice->total_dgst;
-        $computedAmountExGst = $invoice->total_amount - $computedTotalGst;
-        $totalGST += $computedTotalGst;
-        $totalExcludingGST += $computedAmountExGst;
-    }
-
-    // Calculate total amount and total transactions
-    $totalAmount = round($invoices->sum('total_amount'), 2);
-    $totalTransactions = $invoices->count();
-    $params = [];
-
-    if ($request->business_id) $params['business_id'] = $request->business_id;
-    if ($request->location_id) $params['location_id'] = $request->location_id;
-    if ($request->day) $params['day'] = $request->day;
-    if ($request->month) $params['month'] = $request->month;
-    if ($request->year) $params['year'] = $request->year;
-    if ($request->week_start) $params['week_start'] = $request->week_start;
-    if ($request->week_end) $params['week_end'] = $request->week_end;
-    if ($request->amount_min) $params['amount_min'] = $request->amount_min;
-    if ($request->amount_max) $params['amount_max'] = $request->amount_max;
-    if ($request->payment_mode) $params['payment_mode'] = $request->payment_mode;
-    
-    $excel_params = $params;
-    $excel_params['type'] = 'normal';
-    $excel_query = http_build_query($excel_params);
-    
-    $pdf_params = $params;
-    $pdf_params['type'] = 'normal';
-    $pdf_params['max_amount'] = $params['amount_max'] ?? null;
-    $pdf_params['min_amount'] = $params['amount_min'] ?? null;
-    $pdf_params['start_date'] = $params['week_start'] ?? null;
-    $pdf_params['end_date'] = $params['week_end'] ?? null;
-    unset($pdf_params['amount_max'], $pdf_params['amount_min'], $pdf_params['week_start'], $pdf_params['week_end']);
-    $pdf_query = http_build_query($pdf_params);
-    
-    $excel = "https://dashboard.invoicemate.in/api/invoice-excel.php?" . $excel_query;
-    $pdf = "https://invoice.invoicemate.in/invoices.html?" . $pdf_query;    
-    return response([
-        'status' => true,
-        'total_amount' => $totalAmount,
-        'total_transactions' => $totalTransactions,
-        'total_gst' => round($totalGST, 2),
-        'total_excluding_gst' => round($totalExcludingGST, 2),
-        'pdf' => $pdf,
-        'excel' => $excel,
-        'data' => $invoices,
-        'message' => "Data fetched."
-    ], 200);
-}
-public function getInvoiceListReport(Request $request)
-{
-    $query = Invoice::query();
-
-    // Filter by day
-    if ($request->has('day')) {
-        $query->whereDate('invoice_date', $request->day);
-    }
-
-    // Filter by month
-    if ($request->has('month')) {
-        $query->whereMonth('invoice_date', $request->month);
-    }
-
-    // Filter by week
-    if ($request->has('week_start') && $request->has('week_end')) {
-        $query->whereDate('invoice_date', '>=', $request->week_start)
-              ->whereDate('invoice_date', '<=', $request->week_end);
-    }
-
-    // Filter by year
-    if ($request->has('year')) {
-        $query->whereYear('invoice_date', $request->year);
-    }
-
-    // Filter by invoice type or performa
-    if ($request->has('type')) {
-        $query->where('type', $request->type);
-    }
-
-    // Apply payment mode filter if provided
-    if ($request->has('payment_mode')) {
-        $query->where('payment_mode', $request->payment_mode);
-    }
-
-    // Apply business_id filter if provided
-    if ($request->has('business_id')) {
-        $query->where('business_id', $request->business_id);
-    }
-
-    // Apply location_id filter if provided
-    if ($request->has('location_id')) {
-        $query->where('location_id', $request->location_id);
-    }
-
-    // Filter by name
-    if ($request->has('name')) {
-        $query->where('name', 'like', '%' . $request->name . '%');
-    }
-
-    // Filter by amount range
-    if ($request->has('amount_min') && $request->has('amount_max')) {
-        $query->whereBetween('total_amount', [$request->amount_min, $request->amount_max]);
-    }
-
-    // Filter by invoice ID
-    if ($request->has('invoice_id')) {
-        $query->where('id', $request->invoice_id);
-    }
-    
-
-    // Order by id in descending order
-    $query->orderBy('id', 'DESC');
-
-    // Get the filtered invoices
-    $query->where('is_completed', 1);
-    $invoices = $query->select([
-        DB::raw('CASE WHEN type = "performa" THEN 0 ELSE CAST(serial_no AS SIGNED) END as id'),
-        'name',
-        'total_amount',
-        'invoice_date',
-        'total_cgst',
-        'total_dgst',
-        'total_igst',
-        'type',
-        DB::raw('ROUND((total_igst + total_dgst + total_cgst), 2) as tgst'),
-        DB::raw('ROUND((total_amount - (total_igst + total_dgst + total_cgst)), 2) as amount_wgst')
-    ])->get();
-
-    // Calculate total amount and total transactions
-    $totalAmount = round($invoices->sum('total_amount'), 2);
-    $totalgst = round($invoices->sum('total_igst') + $invoices->sum('total_cgst') + $invoices->sum('total_dgst'), 2);
-    $totalTransactions = $invoices->count();
-
-    $excel = "https://dashboard.invoicemate.in/api/invoice-excel.php?" . http_build_query($request->all());
-    $pdf = "https://invoice.invoicemate.in/invoices.html?" . http_build_query($request->all());
-
-    return response([
-        'status' => true,
-        'total_amount' => $totalAmount,
-        'total_amount_wgst' => round($totalAmount-$totalgst,2),
-        'tgst' => $totalgst,
-        'total_transactions' => $totalTransactions,
-        'pdf' => $pdf,
-        'excel' => $excel,
-        'data' => $invoices,
-        'message' => "Data fetched."
-    ], 200);
-}
-public function getExistedUser(Request $request)
-{
-    // Validate the request to ensure either 'name' or 'mobile_number' is provided
-    $request->validate([
-        'mobile_number' => 'required',
-    ]);
-    $mobileNumber = $request->input('mobile_number');
-
-    // Query to find the user based on name or mobile number
-    $query = Invoice::query();
-
-    if ($mobileNumber) {
-        $query->where('mobile_number', 'like', '%' . $mobileNumber . '%');
-    }
-
-    // Retrieve the first matching invoice
-    $invoice = $query->first();
-
-    // If no invoice found, return an error response
-    if (!$invoice) {
-        return response([
-            'status' => false,
-            'message' => 'No user found with the provided name or mobile number.'
-        ], 404);
-    }
-
-    // Get billing and shipping addres
-    $billingAddress = Addres::where('invoice_id', $invoice->id)->where('type', 'billing')->first();
-    $shippingAddress = Addres::where('invoice_id', $invoice->id)->where('type', 'shipping')->first();
-
-    // Prepare response data
-    $data = [
-        'name' => $invoice->name,
-        'mobile_number' => $invoice->mobile_number,
-        'customer_type' => $invoice->customer_type,
-        'doc_no' => strtoupper($invoice->doc_no),
-        'billing_id' => $invoice->billing_address_id,
-        'shipping_id' => $invoice->shipping_address_id,
-        'billing_address' => $billingAddress ? $billingAddress->only(['address_1', 'address_2', 'city', 'state', 'pincode']) : null,
-        'shipping_address' => $shippingAddress ? $shippingAddress->only(['address_1', 'address_2', 'city', 'state', 'pincode']) : null,
-    ];
-
-    return response([
-        'status' => true,
-        'data' => $data,
-        'message' => 'User data fetched successfully.'
-    ], 200);
-}
-
-public function dashboardReport(Request $request)
-{
-    // Helper function to apply date filters
-    $applyDateFilters = function ($query) use ($request) {
+    public function getSaleReport(Request $request)
+    {
+        $query = Invoice::query();
+
+        // Filter by day
         if ($request->has('day')) {
             $query->whereDate('invoice_date', $request->day);
         }
+
+        // Filter by month
         if ($request->has('month')) {
             $query->whereMonth('invoice_date', $request->month);
         }
-        if ($request->has('week_start') && $request->has('week_end')) {
+
+        // Filter by week
+        if ($request->has('week_start')) {
+            // Assuming the week is passed as an array with start and end dates
             $query->whereDate('invoice_date', '>=', $request->week_start)
-                  ->whereDate('invoice_date', '<=', $request->week_end);
+                ->whereDate('invoice_date', '<=', $request->week_end);
         }
+
+        // Filter by year
         if ($request->has('year')) {
             $query->whereYear('invoice_date', $request->year);
         }
-    };
 
-    // Get Sale Report
-    $saleQuery = Invoice::query()->where('is_completed', 1)->where('business_id',$request->business_id)->where('location_id',$request->location_id);
-    $applyDateFilters($saleQuery);
-    $sales = $saleQuery->orderBy('id', 'DESC')->get(['id', 'name', 'total_amount', 'invoice_date', 'type']);
-    $actualSaleAmount = round($sales->sum('total_amount'), 2);
-
-    // Get Purchase Sale Invoice Report
-    $purchaseSaleQuery = Invoice::query()->where('is_completed', 1)->where('type', 'normal')->where('business_id',$request->business_id)->where('location_id',$request->location_id);
-    $applyDateFilters($purchaseSaleQuery);
-    $purchaseSales = $purchaseSaleQuery->get(['id', 'total_dgst', 'total_cgst', 'total_igst', 'total_amount']);
-    $totalGst = round($purchaseSales->sum(function($invoice) {
-        return $invoice->total_dgst + $invoice->total_cgst + $invoice->total_igst;
-    }), 2);
-    $totalExcludingGst = round($purchaseSales->sum('total_amount') - $totalGst, 2);
-
-    // Get Invoice Report (Item Purchases)
-    $itemQuery = Item::query()
-        ->join('invoices', 'items.invoice_id', '=', 'invoices.id')
-        ->where('invoices.business_id',$request->business_id)
-        ->where('invoices.location_id',$request->location_id)
-        ->where('invoices.is_completed', 1)
-        ->where('invoices.type', 'normal');
-    $applyDateFilters($itemQuery);
-    $items = $itemQuery->get(['items.quantity']);
-    $totalItemsPurchased = $items->sum('quantity');
-
-    // Get Expenses Report
-    $expenseQuery = Expenses::query()->where('business_id',$request->business_id)->where('location_id',$request->location_id);
-    // Apply date filters to expenses (assuming expenses have a 'created_at' field)
-    if ($request->has('day')) {
-        $expenseQuery->whereDate('created_at', $request->day);
-    }
-    if ($request->has('month')) {
-        $expenseQuery->whereMonth('created_at', $request->month);
-    }
-    if ($request->has('week_start') && $request->has('week_end')) {
-        $expenseQuery->whereBetween('created_at', [$request->week_start, $request->week_end]);
-    }
-    if ($request->has('year')) {
-        $expenseQuery->whereYear('created_at', $request->year);
-    }
-    $expenses = $expenseQuery->get();
-    $totalAmount = round($expenses->sum('amount'), 2);
-
-    // Prepare response data
-    $data = [
-        'actual_sale_amount' => $actualSaleAmount,
-        'total_excluding_gst' => $totalExcludingGst,
-        'total_expense' => $totalAmount,
-        'total_gst' => $totalGst,
-        'total_items_purchased' => $totalItemsPurchased,
-        'profit_loss' => null
-    ];
-
-    return response([
-        'status' => true,
-        'data' => $data,
-        'message' => 'Dashboard data fetched successfully.'
-    ], 200);
-}
-
-
-public function getBulkInvoices(Request $request)
-{
-    try {
-        // Start with a base query
-        $query = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
-            ->where('is_completed', 1);
-
-        // Apply date range filter if provided
-        if ($request->has('start_date') && $request->has('end_date')) {
-            $query->whereDate('invoice_date', '>=', $request->start_date)
-                  ->whereDate('invoice_date', '<=', $request->end_date);
+        // Filter by invoice type or performa
+        if ($request->has('type')) {
+            $Type = $request->type;
+            $query->where('type', $Type);
         }
 
-        // Apply min amount filter if provided
-        if ($request->has('min_amount')) {
-            $query->where('total_amount', '>=', $request->min_amount);
+        // Filter by name
+        if ($request->has('name')) {
+            $name = $request->name;
+            $query->where('name', 'like', '%' . $name . '%');
         }
 
-        // Apply max amount filter if provided
-        if ($request->has('max_amount')) {
-            $query->where('total_amount', '<=', $request->max_amount);
+        // Filter by amount range
+        if ($request->has('amount_min') && $request->has('amount_max')) {
+            $amountMin = $request->amount_min;
+            $amountMax = $request->amount_max;
+            $query->whereBetween('total_amount', [$amountMin, $amountMax]);
         }
 
-        // Apply type filter if provided
+        // Filter by invoice ID
+        if ($request->has('invoice_id')) {
+            $query->where('id', $request->invoice_id);
+        }
+
+        // Order by id in descending order
+        $query->orderBy('id', 'DESC');
+
+        // Get the filtered invoices
+        $query->where('is_completed', 1);
+        $invoices = $query->get(['id', 'name', 'total_amount', 'invoice_date', 'type']);
+
+        // Calculate total amount and total transactions
+        $totalAmount = round($invoices->sum('total_amount'), 2);
+        $totalTransactions = $invoices->count();
+
+        return response([
+            'status' => true,
+            'total_amount' => $totalAmount,
+            'total_transactions' => $totalTransactions,
+            'data' => $invoices,
+            'message' => "Data fetched."
+        ], 200);
+    }
+
+    public function getExpenseReport(Request $request)
+    {
+        $query = Expenses::query();
+
+        // Filter by day
+        if ($request->has('day')) {
+            $query->whereDate('created_at', $request->day);
+        }
+
+        // Filter by month
+        if ($request->has('month')) {
+            $query->whereMonth('created_at', $request->month);
+        }
+
+        // Filter by week
+        if ($request->has('week_start')) {
+            // Assuming the week is passed as an array with start and end dates
+            $query->whereBetween('created_at', [$request->week_start, $request->week_end]);
+        }
+
+        // Filter by year
+        if ($request->has('year')) {
+            $query->whereYear('created_at', $request->year);
+        }
+
+        // Filter by expense type (0 or 1)
+        if ($request->has('type')) {
+            $type = $request->type;
+            $query->where('type', $type);
+        }
+
+        // Filter by name
+        if ($request->has('name')) {
+            $name = $request->name;
+            $query->where('name', 'like', '%' . $name . '%');
+        }
+
+        // Apply payment mode filter if provided
+        if ($request->has('business_id')) {
+            $query->where('business_id', $request->business_id);
+        }
+        // Apply payment mode filter if provided
+        if ($request->has('location_id')) {
+            $query->where('location_id', $request->location_id);
+        }
+
+        // Filter by amount range
+        if ($request->has('amount_min') && $request->has('amount_max')) {
+            $amountMin = $request->amount_min;
+            $amountMax = $request->amount_max;
+            $query->whereBetween('amount', [$amountMin, $amountMax]);
+        }
+
+        if ($request->has('expense_id')) {
+            $query->where('id', $request->expense_id);
+        }
+
+        // Order by id in descending order
+        $query->orderBy('id', 'DESC');
+
+
+        $expenses = $query->get();
+        // Calculate total amount and total transactions
+        $totalAmount = round($expenses->sum('amount'), 2);
+        $totalTransactions = $expenses->count();
+        $params = [];
+
+        if ($request->day)
+            $params[] = "day=" . $request->day;
+        if ($request->month)
+            $params[] = "month=" . $request->month;
+        if ($request->year)
+            $params[] = "year=" . $request->year;
+        if ($request->week_start)
+            $params[] = "week_start=" . $request->week_start;
+        if ($request->week_end)
+            $params[] = "week_end=" . $request->week_end;
+        if ($request->type)
+            $params[] = "type=" . $request->type;
+        if ($request->name)
+            $params[] = "name=" . $request->name;
+        if ($request->amount_min)
+            $params[] = "amount_min=" . $request->amount_min;
+        if ($request->amount_max)
+            $params[] = "amount_max=" . $request->amount_max;
+        if ($request->business_id)
+            $params[] = "business_id=" . $request->business_id;
+        if ($request->location_id)
+            $params[] = "location_id=" . $request->location_id;
+
+        $query_string = implode("&", $params);
+
+        $excel = "https://dashboard.invoicemate.in/api/expense-excel.php?" . $query_string;
+        $pdf = "https://dashboard.invoicemate.in/api/expense-pdf.php?" . $query_string;
+        return response([
+            'status' => true,
+            'total_expense' => $totalAmount,
+            'total_transactions' => $totalTransactions,
+            'excel' => $excel,
+            'pdf' => $pdf,
+            'data' => $expenses,
+            'message' => "Data Feteched."
+        ], 200);
+    }
+
+    public function getPurchaseSaleInvoice(Request $request)
+    {
+        $query = Invoice::query();
+
+        // Filter by day
+        if ($request->has('day')) {
+            $query->whereDate('invoice_date', $request->day);
+        }
+
+        // Filter by month
+        if ($request->has('month')) {
+            $query->whereMonth('invoice_date', $request->month);
+        }
+
+        // Filter by week
+        if ($request->has('week_start')) {
+            // Assuming the week is passed as an array with start and end dates
+            $query->whereDate('invoice_date', '>=', $request->week_start)
+                ->whereDate('invoice_date', '<=', $request->week_end);
+        }
+
+        // Filter by year
+        if ($request->has('year')) {
+            $query->whereYear('invoice_date', $request->year);
+        }
+
+        // Filter by payment mode
+        if ($request->has('payment_mode')) {
+            $paymentMode = $request->payment_mode;
+            $query->where('payment_mode', $paymentMode);
+        }
+
+        // Filter by invoice type (normal only)
+        $query->where('type', 'normal');
+
+        // Filter by name
+        if ($request->has('name')) {
+            $name = $request->name;
+            $query->where('name', 'like', '%' . $name . '%');
+        }
+
+        // Filter by amount range
+        if ($request->has('amount_min') && $request->has('amount_max')) {
+            $amountMin = $request->amount_min;
+            $amountMax = $request->amount_max;
+            $query->whereBetween('total_amount', [$amountMin, $amountMax]);
+        }
+
+        // Filter by invoice ID
+        if ($request->has('invoice_id')) {
+            $query->where('id', $request->invoice_id);
+        }
+
+        // Ensure only completed invoices are considered
+        $query->where('is_completed', 1);
+
+        // Order by id in descending order
+        $query->orderBy('id', 'DESC');
+
+        // Select only the specified columns
+        $invoices = $query->get(['id', 'name', 'total_amount', 'total_igst', 'total_cgst', 'total_dgst', 'invoice_date', 'type']);
+
+        // Calculate total GST, amount excluding GST, and aggregate totals
+        $totalGST = 0;
+        $totalExcludingGST = 0;
+        foreach ($invoices as $invoice) {
+            $computedTotalGst = $invoice->total_igst + $invoice->total_cgst + $invoice->total_dgst;
+            $computedAmountExGst = $invoice->total_amount - $computedTotalGst;
+            $totalGST += $computedTotalGst;
+            $totalExcludingGST += $computedAmountExGst;
+        }
+
+        // Calculate total amount and total transactions
+        $totalAmount = round($invoices->sum('total_amount'), 2);
+        $totalTransactions = $invoices->count();
+        $params = [];
+
+        if ($request->business_id)
+            $params['business_id'] = $request->business_id;
+        if ($request->location_id)
+            $params['location_id'] = $request->location_id;
+        if ($request->day)
+            $params['day'] = $request->day;
+        if ($request->month)
+            $params['month'] = $request->month;
+        if ($request->year)
+            $params['year'] = $request->year;
+        if ($request->week_start)
+            $params['week_start'] = $request->week_start;
+        if ($request->week_end)
+            $params['week_end'] = $request->week_end;
+        if ($request->amount_min)
+            $params['amount_min'] = $request->amount_min;
+        if ($request->amount_max)
+            $params['amount_max'] = $request->amount_max;
+        if ($request->payment_mode)
+            $params['payment_mode'] = $request->payment_mode;
+
+        $excel_params = $params;
+        $excel_params['type'] = 'normal';
+        $excel_query = http_build_query($excel_params);
+
+        $pdf_params = $params;
+        $pdf_params['type'] = 'normal';
+        $pdf_params['max_amount'] = $params['amount_max'] ?? null;
+        $pdf_params['min_amount'] = $params['amount_min'] ?? null;
+        $pdf_params['start_date'] = $params['week_start'] ?? null;
+        $pdf_params['end_date'] = $params['week_end'] ?? null;
+        unset($pdf_params['amount_max'], $pdf_params['amount_min'], $pdf_params['week_start'], $pdf_params['week_end']);
+        $pdf_query = http_build_query($pdf_params);
+
+        $excel = "https://dashboard.invoicemate.in/api/invoice-excel.php?" . $excel_query;
+        $pdf = "https://invoice.invoicemate.in/invoices.html?" . $pdf_query;
+        return response([
+            'status' => true,
+            'total_amount' => $totalAmount,
+            'total_transactions' => $totalTransactions,
+            'total_gst' => round($totalGST, 2),
+            'total_excluding_gst' => round($totalExcludingGST, 2),
+            'pdf' => $pdf,
+            'excel' => $excel,
+            'data' => $invoices,
+            'message' => "Data fetched."
+        ], 200);
+    }
+    public function getInvoiceListReport(Request $request)
+    {
+        $query = Invoice::query();
+
+        // Filter by day
+        if ($request->has('day')) {
+            $query->whereDate('invoice_date', $request->day);
+        }
+
+        // Filter by month
+        if ($request->has('month')) {
+            $query->whereMonth('invoice_date', $request->month);
+        }
+
+        // Filter by week
+        if ($request->has('week_start') && $request->has('week_end')) {
+            $query->whereDate('invoice_date', '>=', $request->week_start)
+                ->whereDate('invoice_date', '<=', $request->week_end);
+        }
+
+        // Filter by year
+        if ($request->has('year')) {
+            $query->whereYear('invoice_date', $request->year);
+        }
+
+        // Filter by invoice type or performa
         if ($request->has('type')) {
             $query->where('type', $request->type);
         }
@@ -1615,107 +1443,340 @@ public function getBulkInvoices(Request $request)
         if ($request->has('payment_mode')) {
             $query->where('payment_mode', $request->payment_mode);
         }
-        // Apply payment mode filter if provided
+
+        // Apply business_id filter if provided
         if ($request->has('business_id')) {
             $query->where('business_id', $request->business_id);
         }
 
-        // Apply payment mode filter if provided
+        // Apply location_id filter if provided
         if ($request->has('location_id')) {
             $query->where('location_id', $request->location_id);
         }
-        // Execute the query and get the results
-        $invoices = $query->get();
 
-        // Check if any invoices are found
-        if ($invoices->isEmpty()) {
-            return response()->json(['status' => false, 'message' => 'No invoices found matching the criteria.'], 404);
+        // Filter by name
+        if ($request->has('name')) {
+            $query->where('name', 'like', '%' . $request->name . '%');
         }
 
-        // Return the detailed invoices
-        return response()->json([
-            'status' => true, 
-            'message' => 'Invoices retrieved successfully.', 
-            'data' => $invoices
+        // Filter by amount range
+        if ($request->has('amount_min') && $request->has('amount_max')) {
+            $query->whereBetween('total_amount', [$request->amount_min, $request->amount_max]);
+        }
+
+        // Filter by invoice ID
+        if ($request->has('invoice_id')) {
+            $query->where('id', $request->invoice_id);
+        }
+
+
+        // Order by id in descending order
+        $query->orderBy('id', 'DESC');
+
+        // Get the filtered invoices
+        $query->where('is_completed', 1);
+        $invoices = $query->select([
+            DB::raw('CASE WHEN type = "performa" THEN 0 ELSE CAST(serial_no AS SIGNED) END as id'),
+            'name',
+            'total_amount',
+            'invoice_date',
+            'total_cgst',
+            'total_dgst',
+            'total_igst',
+            'type',
+            DB::raw('ROUND((total_igst + total_dgst + total_cgst), 2) as tgst'),
+            DB::raw('ROUND((total_amount - (total_igst + total_dgst + total_cgst)), 2) as amount_wgst')
+        ])->get();
+
+        // Calculate total amount and total transactions
+        $totalAmount = round($invoices->sum('total_amount'), 2);
+        $totalgst = round($invoices->sum('total_igst') + $invoices->sum('total_cgst') + $invoices->sum('total_dgst'), 2);
+        $totalTransactions = $invoices->count();
+
+        $excel = "https://dashboard.invoicemate.in/api/invoice-excel.php?" . http_build_query($request->all());
+        $pdf = "https://invoice.invoicemate.in/invoices.html?" . http_build_query($request->all());
+
+        return response([
+            'status' => true,
+            'total_amount' => $totalAmount,
+            'total_amount_wgst' => round($totalAmount - $totalgst, 2),
+            'tgst' => $totalgst,
+            'total_transactions' => $totalTransactions,
+            'pdf' => $pdf,
+            'excel' => $excel,
+            'data' => $invoices,
+            'message' => "Data fetched."
         ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false, 
-            'message' => 'Failed to retrieve invoices.', 
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
-public function getBulkInvoicesSelected(Request $request)
-{
-    try {
-        // Start with a base query
-        $query = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
-            ->leftJoin('businessses', 'invoices.business_id', '=', 'businessses.id')
-            ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
-            ->select(
-                'invoices.*',
-                'businessses.gst as business_gst',
-                'businessses.logo as business_logo',
-                'locations.location_name',
-                'locations.address as location_address',
-                'locations.email as location_email',
-                'locations.phone as location_phone',
-                'locations.state as location_state',
-                'locations.alternate_phone as location_alternate_phone'
-            )
-            ->where('invoices.is_completed', 1);
-            
-        if ($request->has('ids') && is_array($request->ids)) {
-            $query->whereIn('invoices.id', $request->ids);
+    public function getExistedUser(Request $request)
+    {
+        // Validate the request to ensure either 'name' or 'mobile_number' is provided
+        $request->validate([
+            'mobile_number' => 'required',
+        ]);
+        $mobileNumber = $request->input('mobile_number');
+
+        // Query to find the user based on name or mobile number
+        $query = Invoice::query();
+
+        if ($mobileNumber) {
+            $query->where('mobile_number', 'like', '%' . $mobileNumber . '%');
         }
 
-        // Execute the query and get the results
-        $invoices = $query->get();
+        // Retrieve the first matching invoice
+        $invoice = $query->first();
 
-        // Check if any invoices are found
-        if ($invoices->isEmpty()) {
-            return response()->json(['status' => false, 'message' => 'No invoices found matching the criteria.'], 404);
+        // If no invoice found, return an error response
+        if (!$invoice) {
+            return response([
+                'status' => false,
+                'message' => 'No user found with the provided name or mobile number.'
+            ], 404);
         }
 
-        // Process each invoice to add business_info
-        $processedInvoices = $invoices->map(function ($invoice) {
-            $invoice->business_info = [
-                'name' => $invoice->location_name ?? 'InvoiceMate',
-                'address' => $invoice->location_address ?? 'Business Address Not Found',
-                'phone' => $invoice->location_phone ?? 'Business Phone Not Found',
-                'alternate_phone' => $invoice->location_alternate_phone ?? 'Business Alternate Phone Not Found',
-                'gst' => $invoice->business_gst ?? 'Business GST Not Found',
-                'state' => $invoice->location_state ?? 'Business State Not Found',
-                'business_logo' => $invoice->business_logo ?? 'Business Logo Not Found',
-            ];
-            
-            // Remove the additional fields from the main invoice object
-            unset($invoice->business_gst, $invoice->location_name, $invoice->location_address, 
-                  $invoice->location_email, $invoice->location_phone, $invoice->location_alternate_phone);
-            
-            return $invoice;
-        });
+        // Get billing and shipping addres
+        $billingAddress = Addres::where('invoice_id', $invoice->id)->where('type', 'billing')->first();
+        $shippingAddress = Addres::where('invoice_id', $invoice->id)->where('type', 'shipping')->first();
 
-        // Return the detailed invoices
-        return response()->json([
-            'status' => true, 
-            'message' => 'Invoices retrieved successfully.', 
-            'data' => $processedInvoices
+        // Prepare response data
+        $data = [
+            'name' => $invoice->name,
+            'mobile_number' => $invoice->mobile_number,
+            'customer_type' => $invoice->customer_type,
+            'doc_no' => strtoupper($invoice->doc_no),
+            'billing_id' => $invoice->billing_address_id,
+            'shipping_id' => $invoice->shipping_address_id,
+            'billing_address' => $billingAddress ? $billingAddress->only(['address_1', 'address_2', 'city', 'state', 'pincode']) : null,
+            'shipping_address' => $shippingAddress ? $shippingAddress->only(['address_1', 'address_2', 'city', 'state', 'pincode']) : null,
+        ];
+
+        return response([
+            'status' => true,
+            'data' => $data,
+            'message' => 'User data fetched successfully.'
         ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false, 
-            'message' => 'Failed to retrieve invoices.', 
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
- 
- 
-public function getItemizedSalesReport(Request $request)
+
+    public function dashboardReport(Request $request)
+    {
+        // Helper function to apply date filters
+        $applyDateFilters = function ($query) use ($request) {
+            if ($request->has('day')) {
+                $query->whereDate('invoice_date', $request->day);
+            }
+            if ($request->has('month')) {
+                $query->whereMonth('invoice_date', $request->month);
+            }
+            if ($request->has('week_start') && $request->has('week_end')) {
+                $query->whereDate('invoice_date', '>=', $request->week_start)
+                    ->whereDate('invoice_date', '<=', $request->week_end);
+            }
+            if ($request->has('year')) {
+                $query->whereYear('invoice_date', $request->year);
+            }
+        };
+
+        // Get Sale Report
+        $saleQuery = Invoice::query()->where('is_completed', 1)->where('business_id', $request->business_id)->where('location_id', $request->location_id);
+        $applyDateFilters($saleQuery);
+        $sales = $saleQuery->orderBy('id', 'DESC')->get(['id', 'name', 'total_amount', 'invoice_date', 'type']);
+        $actualSaleAmount = round($sales->sum('total_amount'), 2);
+
+        // Get Purchase Sale Invoice Report
+        $purchaseSaleQuery = Invoice::query()->where('is_completed', 1)->where('type', 'normal')->where('business_id', $request->business_id)->where('location_id', $request->location_id);
+        $applyDateFilters($purchaseSaleQuery);
+        $purchaseSales = $purchaseSaleQuery->get(['id', 'total_dgst', 'total_cgst', 'total_igst', 'total_amount']);
+        $totalGst = round($purchaseSales->sum(function ($invoice) {
+            return $invoice->total_dgst + $invoice->total_cgst + $invoice->total_igst;
+        }), 2);
+        $totalExcludingGst = round($purchaseSales->sum('total_amount') - $totalGst, 2);
+
+        // Get Invoice Report (Item Purchases)
+        $itemQuery = Item::query()
+            ->join('invoices', 'items.invoice_id', '=', 'invoices.id')
+            ->where('invoices.business_id', $request->business_id)
+            ->where('invoices.location_id', $request->location_id)
+            ->where('invoices.is_completed', 1)
+            ->where('invoices.type', 'normal');
+        $applyDateFilters($itemQuery);
+        $items = $itemQuery->get(['items.quantity']);
+        $totalItemsPurchased = $items->sum('quantity');
+
+        // Get Expenses Report
+        $expenseQuery = Expenses::query()->where('business_id', $request->business_id)->where('location_id', $request->location_id);
+        // Apply date filters to expenses (assuming expenses have a 'created_at' field)
+        if ($request->has('day')) {
+            $expenseQuery->whereDate('created_at', $request->day);
+        }
+        if ($request->has('month')) {
+            $expenseQuery->whereMonth('created_at', $request->month);
+        }
+        if ($request->has('week_start') && $request->has('week_end')) {
+            $expenseQuery->whereBetween('created_at', [$request->week_start, $request->week_end]);
+        }
+        if ($request->has('year')) {
+            $expenseQuery->whereYear('created_at', $request->year);
+        }
+        $expenses = $expenseQuery->get();
+        $totalAmount = round($expenses->sum('amount'), 2);
+
+        // Prepare response data
+        $data = [
+            'actual_sale_amount' => $actualSaleAmount,
+            'total_excluding_gst' => $totalExcludingGst,
+            'total_expense' => $totalAmount,
+            'total_gst' => $totalGst,
+            'total_items_purchased' => $totalItemsPurchased,
+            'profit_loss' => null
+        ];
+
+        return response([
+            'status' => true,
+            'data' => $data,
+            'message' => 'Dashboard data fetched successfully.'
+        ], 200);
+    }
+
+
+    public function getBulkInvoices(Request $request)
+    {
+        try {
+            // Start with a base query
+            $query = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
+                ->where('is_completed', 1);
+
+            // Apply date range filter if provided
+            if ($request->has('start_date') && $request->has('end_date')) {
+                $query->whereDate('invoice_date', '>=', $request->start_date)
+                    ->whereDate('invoice_date', '<=', $request->end_date);
+            }
+
+            // Apply min amount filter if provided
+            if ($request->has('min_amount')) {
+                $query->where('total_amount', '>=', $request->min_amount);
+            }
+
+            // Apply max amount filter if provided
+            if ($request->has('max_amount')) {
+                $query->where('total_amount', '<=', $request->max_amount);
+            }
+
+            // Apply type filter if provided
+            if ($request->has('type')) {
+                $query->where('type', $request->type);
+            }
+
+            // Apply payment mode filter if provided
+            if ($request->has('payment_mode')) {
+                $query->where('payment_mode', $request->payment_mode);
+            }
+            // Apply payment mode filter if provided
+            if ($request->has('business_id')) {
+                $query->where('business_id', $request->business_id);
+            }
+
+            // Apply payment mode filter if provided
+            if ($request->has('location_id')) {
+                $query->where('location_id', $request->location_id);
+            }
+            // Execute the query and get the results
+            $invoices = $query->get();
+
+            // Check if any invoices are found
+            if ($invoices->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'No invoices found matching the criteria.'], 404);
+            }
+
+            // Return the detailed invoices
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoices retrieved successfully.',
+                'data' => $invoices
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve invoices.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getBulkInvoicesSelected(Request $request)
+    {
+        try {
+            // Start with a base query
+            $query = Invoice::with(['items.product', 'billingAddress', 'shippingAddress'])
+                ->leftJoin('businessses', 'invoices.business_id', '=', 'businessses.id')
+                ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
+                ->select(
+                    'invoices.*',
+                    'businessses.gst as business_gst',
+                    'businessses.logo as business_logo',
+                    'locations.location_name',
+                    'locations.address as location_address',
+                    'locations.email as location_email',
+                    'locations.phone as location_phone',
+                    'locations.state as location_state',
+                    'locations.alternate_phone as location_alternate_phone'
+                )
+                ->where('invoices.is_completed', 1);
+
+            if ($request->has('ids') && is_array($request->ids)) {
+                $query->whereIn('invoices.id', $request->ids);
+            }
+
+            // Execute the query and get the results
+            $invoices = $query->get();
+
+            // Check if any invoices are found
+            if ($invoices->isEmpty()) {
+                return response()->json(['status' => false, 'message' => 'No invoices found matching the criteria.'], 404);
+            }
+
+            // Process each invoice to add business_info
+            $processedInvoices = $invoices->map(function ($invoice) {
+                $invoice->business_info = [
+                    'name' => $invoice->location_name ?? 'InvoiceMate',
+                    'address' => $invoice->location_address ?? 'Business Address Not Found',
+                    'phone' => $invoice->location_phone ?? 'Business Phone Not Found',
+                    'alternate_phone' => $invoice->location_alternate_phone ?? 'Business Alternate Phone Not Found',
+                    'gst' => $invoice->business_gst ?? 'Business GST Not Found',
+                    'state' => $invoice->location_state ?? 'Business State Not Found',
+                    'business_logo' => $invoice->business_logo ?? 'Business Logo Not Found',
+                ];
+
+                // Remove the additional fields from the main invoice object
+                unset(
+                    $invoice->business_gst,
+                    $invoice->location_name,
+                    $invoice->location_address,
+                    $invoice->location_email,
+                    $invoice->location_phone,
+                    $invoice->location_alternate_phone
+                );
+
+                return $invoice;
+            });
+
+            // Return the detailed invoices
+            return response()->json([
+                'status' => true,
+                'message' => 'Invoices retrieved successfully.',
+                'data' => $processedInvoices
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve invoices.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function getItemizedSalesReport(Request $request)
     {
         // Start building the query
         $query = DB::table('items')
@@ -1739,51 +1800,53 @@ public function getItemizedSalesReport(Request $request)
         // }
 
 
-                // Filter by day
-            if($request->has('day')){
-                $query->whereDate('invoices.invoice_date', $request->day);
-            }
+        // Filter by day
+        if ($request->has('day')) {
+            $query->whereDate('invoices.invoice_date', $request->day);
+        }
 
-            // Filter by month
-            if($request->has('month')){
-                $query->whereMonth('invoices.invoice_date', $request->month);
-            }
+        // Filter by month
+        if ($request->has('month')) {
+            $query->whereMonth('invoices.invoice_date', $request->month);
+        }
 
-            
 
-                // Filter by year
-            if($request->has('year')){
-                $query->whereYear('invoices.invoice_date', $request->year);
-            }
 
-            // Filter by week
-            if($request->has('week_start')){
-                // Assuming the week is passed as an array with start and end dates
-                $query->whereDate('invoices.invoice_date', '>=', $request->week_start)
-                      ->whereDate('invoices.invoice_date', '<=', $request->week_end);
-            }
+        // Filter by year
+        if ($request->has('year')) {
+            $query->whereYear('invoices.invoice_date', $request->year);
+        }
 
-                        // Filter by amount range
-            if($request->has('amount_min') && $request->has('amount_max')){
-                $amountMin = $request->amount_min;
-                $amountMax = $request->amount_max;
-                $query->whereBetween('items.price_of_one', [$amountMin, $amountMax]);
-            } 
+        // Filter by week
+        if ($request->has('week_start')) {
+            // Assuming the week is passed as an array with start and end dates
+            $query->whereDate('invoices.invoice_date', '>=', $request->week_start)
+                ->whereDate('invoices.invoice_date', '<=', $request->week_end);
+        }
+
+        // Filter by amount range
+        if ($request->has('amount_min') && $request->has('amount_max')) {
+            $amountMin = $request->amount_min;
+            $amountMax = $request->amount_max;
+            $query->whereBetween('items.price_of_one', [$amountMin, $amountMax]);
+        }
 
 
         // Get the results
-        $results = $query->select('products.name as product_name', 
-                                  'items.price_of_one', 
-                                  'items.gst_rate',
-                                  DB::raw('SUM(items.quantity) as total_quantity'), 
-                                  DB::raw('SUM(items.price_of_all) as total_sales'))
-                         ->groupBy('products.name', 'items.product_id', 'items.price_of_one', 'items.gst_rate')
-                         ->orderBy('items.price_of_one')
-                         ->get();
+        $results = $query->select(
+            'products.name as product_name',
+            'items.price_of_one',
+            'items.gst_rate',
+            DB::raw('SUM(items.quantity) as total_quantity'),
+            DB::raw('SUM(items.price_of_all) as total_sales')
+        )
+            ->groupBy('products.name', 'items.product_id', 'items.price_of_one', 'items.gst_rate')
+            ->orderBy('items.price_of_one')
+            ->get();
 
         // Calculate total sales
 
-       
+
 
         // Prepare data for table
         if ($request->has('purchase_at')) {
@@ -1822,18 +1885,18 @@ public function getItemizedSalesReport(Request $request)
                 ->where('invoices.type', 'performa')
                 ->whereNull('items.id');
 
-            if($request->has('day')){
+            if ($request->has('day')) {
                 $performaQuery->whereDate('invoices.invoice_date', $request->day);
             }
-            if($request->has('month')){
+            if ($request->has('month')) {
                 $performaQuery->whereMonth('invoices.invoice_date', $request->month);
             }
-            if($request->has('year')){
+            if ($request->has('year')) {
                 $performaQuery->whereYear('invoices.invoice_date', $request->year);
             }
-            if($request->has('week_start')){
+            if ($request->has('week_start')) {
                 $performaQuery->whereDate('invoices.invoice_date', '>=', $request->week_start)
-                              ->whereDate('invoices.invoice_date', '<=', $request->week_end);
+                    ->whereDate('invoices.invoice_date', '<=', $request->week_end);
             }
 
             $performaTotal = (float) $performaQuery->sum('invoices.total_amount');
@@ -1859,34 +1922,34 @@ public function getItemizedSalesReport(Request $request)
             // Start with a base query
             $query = Locations::
                 where('business_id', $request->business_id);
-    
+
             // Execute the query and get the results
             $invoices = $query->get();
-    
+
             // Check if any invoices are found
             if ($invoices->isEmpty()) {
                 return response()->json(['status' => false, 'message' => 'No Location found matching the business Id.'], 404);
             }
-    
-            
-    
+
+
+
             // Return the detailed invoices
             return response()->json([
-                'status' => true, 
-                'message' => 'Location retrieved successfully.', 
+                'status' => true,
+                'message' => 'Location retrieved successfully.',
                 'data' => $invoices
             ], 200);
-    
+
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false, 
-                'message' => 'Failed to retrieve invoices.', 
+                'status' => false,
+                'message' => 'Failed to retrieve invoices.',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
 
-   public function getProducts(Request $request)
+    public function getProducts(Request $request)
     {
         $rules = [
             'business_id' => 'required|exists:businessses,id',
@@ -2082,9 +2145,9 @@ public function getItemizedSalesReport(Request $request)
         }
 
         $query = \App\Models\ProductCategory::with('category')
-            ->whereHas('category', function($query) use ($request) {
+            ->whereHas('category', function ($query) use ($request) {
                 $query->where('business_id', $request->business_id);
-                
+
                 // Filter by location_id if provided
                 if ($request->has('location_id') && $request->location_id) {
                     $query->where('location_id', $request->location_id);
@@ -2203,17 +2266,17 @@ public function getItemizedSalesReport(Request $request)
 
             // Handle multiple images from multipart form data
             $uploadedFiles = $request->allFiles();
-            
+
             // Method 1: Check if 'images' field exists (single file or array)
             if (isset($uploadedFiles['images'])) {
                 $images = $uploadedFiles['images'];
-                
+
                 if (is_array($images)) {
                     foreach ($images as $index => $file) {
                         if ($file && $file->isValid()) {
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
-                            
+
                             \App\Models\ProductImage::create([
                                 'product_id' => $product->id,
                                 'image' => $filePath,
@@ -2225,7 +2288,7 @@ public function getItemizedSalesReport(Request $request)
                     if ($file && $file->isValid()) {
                         $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                         $filePath = $file->storeAs('public/product_images', $fileName);
-                        
+
                         \App\Models\ProductImage::create([
                             'product_id' => $product->id,
                             'image' => $filePath,
@@ -2239,20 +2302,20 @@ public function getItemizedSalesReport(Request $request)
                 foreach ($allInputs as $key => $value) {
                     if (preg_match('/^images\[(\d+)\]$/', $key, $matches)) {
                         $index = $matches[1];
-                        
+
                         // Try to get the file using the raw key
                         $file = null;
-                        
+
                         if (isset($uploadedFiles[$key])) {
                             $file = $uploadedFiles[$key];
                         } else if ($request->hasFile($key)) {
                             $file = $request->file($key);
                         }
-                        
+
                         if ($file && $file->isValid()) {
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
-                            
+
                             \App\Models\ProductImage::create([
                                 'product_id' => $product->id,
                                 'image' => $filePath,
@@ -2263,7 +2326,7 @@ public function getItemizedSalesReport(Request $request)
             }
 
             $product->load(['category', 'artCategory', 'images']);
-            
+
             return response()->json(['status' => true, 'message' => 'Product created successfully.', 'data' => $product], 201);
         } catch (\Exception $e) {
             return response()->json(['status' => false, 'message' => 'Failed to create product.', 'error' => $e->getMessage()], 500);
@@ -2288,30 +2351,47 @@ public function getItemizedSalesReport(Request $request)
 
         try {
             $product = Product::findOrFail($request->id);
-            if ($request->has('name')) $product->name = $request->name;
-            if ($request->has('hsn_code')) $product->hsn_code = $request->hsn_code;
-            if ($request->has('price')) $product->price = $request->price;
-            if ($request->has('category_id')) $product->category_id = $request->category_id;
-            if ($request->has('art_category_id')) $product->art_category_id = $request->art_category_id;
-            if ($request->has('location_id')) $product->location_id = $request->location_id;
-            if ($request->has('product_serial_number')) $product->product_serial_number = $request->product_serial_number;
-            if ($request->has('item_code')) $product->item_code = $request->item_code;
-            if ($request->has('height')) $product->height = $request->height;
-            if ($request->has('width')) $product->width = $request->width;
-            if ($request->has('is_framed')) $product->is_framed = $request->is_framed;
-            if ($request->has('is_include_gst')) $product->is_include_gst = $request->is_include_gst;
-            if ($request->has('is_customizable')) $product->is_customizable = $request->is_customizable;
-            if ($request->has('artist_name')) $product->artist_name = $request->artist_name;
-            if ($request->has('quantity')) $product->quantity = $request->quantity;
-            if ($request->has('orientation')) $product->orientation = $request->orientation;
-            if ($request->has('description')) $product->description = $request->description;
+            if ($request->has('name'))
+                $product->name = $request->name;
+            if ($request->has('hsn_code'))
+                $product->hsn_code = $request->hsn_code;
+            if ($request->has('price'))
+                $product->price = $request->price;
+            if ($request->has('category_id'))
+                $product->category_id = $request->category_id;
+            if ($request->has('art_category_id'))
+                $product->art_category_id = $request->art_category_id;
+            if ($request->has('location_id'))
+                $product->location_id = $request->location_id;
+            if ($request->has('product_serial_number'))
+                $product->product_serial_number = $request->product_serial_number;
+            if ($request->has('item_code'))
+                $product->item_code = $request->item_code;
+            if ($request->has('height'))
+                $product->height = $request->height;
+            if ($request->has('width'))
+                $product->width = $request->width;
+            if ($request->has('is_framed'))
+                $product->is_framed = $request->is_framed;
+            if ($request->has('is_include_gst'))
+                $product->is_include_gst = $request->is_include_gst;
+            if ($request->has('is_customizable'))
+                $product->is_customizable = $request->is_customizable;
+            if ($request->has('artist_name'))
+                $product->artist_name = $request->artist_name;
+            if ($request->has('quantity'))
+                $product->quantity = $request->quantity;
+            if ($request->has('orientation'))
+                $product->orientation = $request->orientation;
+            if ($request->has('description'))
+                $product->description = $request->description;
             $product->save();
 
             // Handle image deletions
             $allData = $request->all();
             foreach ($allData as $key => $value) {
                 if (strpos($key, 'delete_image_ids[') === 0) {
-                    $imageId = (int)$value;
+                    $imageId = (int) $value;
                     $imageToDelete = \App\Models\ProductImage::where('id', $imageId)
                         ->where('product_id', $product->id)
                         ->first();
@@ -2333,7 +2413,7 @@ public function getItemizedSalesReport(Request $request)
                     if ($file && $file->isValid()) {
                         $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                         $filePath = $file->storeAs('public/product_images', $fileName);
-                        
+
                         \App\Models\ProductImage::create([
                             'product_id' => $product->id,
                             'image' => $filePath,
@@ -2366,7 +2446,7 @@ public function getItemizedSalesReport(Request $request)
             'image_id' => 'required|exists:product_images,id',
             'product_id' => 'required|exists:products,id',
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
@@ -2377,10 +2457,10 @@ public function getItemizedSalesReport(Request $request)
             $productImage = \App\Models\ProductImage::where('id', $request->image_id)
                 ->where('product_id', $request->product_id)
                 ->first();
-            
+
             if (!$productImage) {
                 return response()->json([
-                    'status' => false, 
+                    'status' => false,
                     'message' => 'Image not found or does not belong to this product.'
                 ], 404);
             }
@@ -2394,13 +2474,13 @@ public function getItemizedSalesReport(Request $request)
             $productImage->delete();
 
             return response()->json([
-                'status' => true, 
+                'status' => true,
                 'message' => 'Product image deleted successfully.'
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false, 
-                'message' => 'Failed to delete product image.', 
+                'status' => false,
+                'message' => 'Failed to delete product image.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -2412,7 +2492,7 @@ public function getItemizedSalesReport(Request $request)
         $rules = [
             'product_id' => 'required|exists:products,id',
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
@@ -2428,35 +2508,35 @@ public function getItemizedSalesReport(Request $request)
 
             // Handle multiple images from multipart form data
             $uploadedFiles = $request->allFiles();
-            
+
             // Method 1: Check if 'images' field exists (single file or array)
             if (isset($uploadedFiles['images'])) {
                 $images = $uploadedFiles['images'];
-                
+
                 if (is_array($images)) {
                     foreach ($images as $index => $file) {
                         if ($file && $file->isValid()) {
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
-                            
+
                             $imageData = [
                                 'product_id' => $product->id,
                                 'image' => $filePath,
                             ];
-                            
+
                             // Add mockup data if is_mockup is set to 1
                             if ($request->is_mockup == 1) {
                                 $imageData['is_mockup'] = 1;
                                 $imageData['mockup_description'] = $request->mockup_description ?? '';
                             }
-                            
+
                             // Add just_product flag if set to 1
                             if ($request->just_product == 1) {
                                 $imageData['just_product'] = 1;
                             }
-                            
+
                             $productImage = \App\Models\ProductImage::create($imageData);
-                            
+
                             $uploadedImages[] = $productImage;
                         }
                     }
@@ -2465,25 +2545,25 @@ public function getItemizedSalesReport(Request $request)
                     if ($file && $file->isValid()) {
                         $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                         $filePath = $file->storeAs('public/product_images', $fileName);
-                        
+
                         $imageData = [
                             'product_id' => $product->id,
                             'image' => $filePath,
                         ];
-                        
+
                         // Add mockup data if is_mockup is set to 1
                         if ($request->is_mockup == 1) {
                             $imageData['is_mockup'] = 1;
                             $imageData['mockup_description'] = $request->mockup_description ?? '';
                         }
-                        
+
                         // Add just_product flag if set to 1
                         if ($request->just_product == 1) {
                             $imageData['just_product'] = 1;
                         }
-                        
+
                         $productImage = \App\Models\ProductImage::create($imageData);
-                        
+
                         $uploadedImages[] = $productImage;
                     }
                 }
@@ -2494,38 +2574,38 @@ public function getItemizedSalesReport(Request $request)
                 foreach ($allInputs as $key => $value) {
                     if (preg_match('/^images\[(\d+)\]$/', $key, $matches)) {
                         $index = $matches[1];
-                        
+
                         // Try to get the file using the raw key
                         $file = null;
-                        
+
                         if (isset($uploadedFiles[$key])) {
                             $file = $uploadedFiles[$key];
                         } else if ($request->hasFile($key)) {
                             $file = $request->file($key);
                         }
-                        
+
                         if ($file && $file->isValid()) {
                             $fileName = 'product_' . $product->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                             $filePath = $file->storeAs('public/product_images', $fileName);
-                            
+
                             $imageData = [
                                 'product_id' => $product->id,
                                 'image' => $filePath,
                             ];
-                            
+
                             // Add mockup data if is_mockup is set to 1
                             if ($request->is_mockup == 1) {
                                 $imageData['is_mockup'] = 1;
                                 $imageData['mockup_description'] = $request->mockup_description ?? '';
                             }
-                            
+
                             // Add just_product flag if set to 1
                             if ($request->just_product == 1) {
                                 $imageData['just_product'] = 1;
                             }
-                            
+
                             $productImage = \App\Models\ProductImage::create($imageData);
-                            
+
                             $uploadedImages[] = $productImage;
                         }
                     }
@@ -2534,20 +2614,20 @@ public function getItemizedSalesReport(Request $request)
 
             if (empty($uploadedImages)) {
                 return response()->json([
-                    'status' => false, 
+                    'status' => false,
                     'message' => 'No valid images were uploaded.'
                 ], 400);
             }
 
             return response()->json([
-                'status' => true, 
+                'status' => true,
                 'message' => count($uploadedImages) . ' image(s) added successfully.',
                 'data' => $uploadedImages
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false, 
-                'message' => 'Failed to add product images.', 
+                'status' => false,
+                'message' => 'Failed to add product images.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -2564,10 +2644,10 @@ public function getItemizedSalesReport(Request $request)
                 ->whereIn('subscriptions.status', ['active', 'trialing'])
                 ->select('subscription_plans.code', 'subscriptions.trial_ends_at', 'subscriptions.status')
                 ->first();
-            
+
             if (!$subscription) {
                 return response()->json([
-                    'status' => false, 
+                    'status' => false,
                     'message' => 'No active subscription found for this business.',
                     'code' => null
                 ], 404);
@@ -2575,13 +2655,13 @@ public function getItemizedSalesReport(Request $request)
 
             // Check if the business is in trial period
             $code = $subscription->code;
-            
+
             // If status is 'trialing' or trial_ends_at is in the future
             if ($subscription->status === 'trialing' || !empty($subscription->trial_ends_at)) {
                 if (!empty($subscription->trial_ends_at)) {
                     $trialEndsAt = \Carbon\Carbon::parse($subscription->trial_ends_at);
                     $now = \Carbon\Carbon::now();
-                    
+
                     // If trial period has not ended yet
                     if ($trialEndsAt->greaterThan($now)) {
                         $code = 'FREE_TRIAL';
@@ -2593,14 +2673,14 @@ public function getItemizedSalesReport(Request $request)
             }
 
             return response()->json([
-                'status' => true, 
+                'status' => true,
                 'message' => 'Subscription plan retrieved successfully.',
                 'code' => $code
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false, 
-                'message' => 'Failed to retrieve subscription plan.', 
+                'status' => false,
+                'message' => 'Failed to retrieve subscription plan.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -2613,7 +2693,7 @@ public function getItemizedSalesReport(Request $request)
             'business_id' => 'required|exists:businessses,id',
             'location_id' => 'required|exists:locations,id',
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
@@ -2622,12 +2702,12 @@ public function getItemizedSalesReport(Request $request)
         try {
             // Debug: Log the request parameters
             \Log::info('Filter request:', $request->all());
-            
+
             $query = Product::with(['category', 'artCategory', 'images'])
                 ->where('business_id', $request->business_id)
                 ->where('location_id', $request->location_id);
-                // Temporarily removed ->where('is_temp', 0) to debug
-            
+            // Temporarily removed ->where('is_temp', 0) to debug
+
             // Debug: Log the base query count
             $baseCount = $query->count();
             \Log::info("Base query count (business_id: {$request->business_id}, location_id: {$request->location_id}): {$baseCount}");
@@ -2703,7 +2783,7 @@ public function getItemizedSalesReport(Request $request)
             $sortBy = $request->get('sort_by', 'created_at');
             $sortOrder = $request->get('sort_order', 'desc');
             $allowedSortFields = ['name', 'price', 'created_at', 'artist_name', 'height', 'width', 'quantity'];
-            
+
             if (in_array($sortBy, $allowedSortFields)) {
                 $query->orderBy($sortBy, $sortOrder);
             }
@@ -2711,7 +2791,7 @@ public function getItemizedSalesReport(Request $request)
             // Debug: Log the final query count before pagination
             $finalCount = $query->count();
             \Log::info("Final query count after filters: {$finalCount}");
-            
+
             // Pagination
             $perPage = $request->get('per_page', 12);
             $products = $query->paginate($perPage);
@@ -2783,7 +2863,7 @@ public function getItemizedSalesReport(Request $request)
             $totalCount = Product::count();
             $businessCount = Product::where('business_id', $request->business_id ?? 0)->count();
             $locationCount = Product::where('location_id', $request->location_id ?? 0)->count();
-            
+
             return response()->json([
                 'status' => true,
                 'message' => 'Debug info retrieved',
@@ -2811,7 +2891,7 @@ public function getItemizedSalesReport(Request $request)
             'selected_products' => 'nullable|array',
             'inquiry_notes' => 'nullable|string'
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
@@ -2848,7 +2928,7 @@ public function getItemizedSalesReport(Request $request)
         $rules = [
             'business_id' => 'required|exists:businessses,id',
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
@@ -2879,10 +2959,10 @@ public function getItemizedSalesReport(Request $request)
             // Search by name, email, or mobile
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;
-                $query->where(function($q) use ($search) {
+                $query->where(function ($q) use ($search) {
                     $q->where('name', 'LIKE', '%' . $search . '%')
-                      ->orWhere('email', 'LIKE', '%' . $search . '%')
-                      ->orWhere('mobile', 'LIKE', '%' . $search . '%');
+                        ->orWhere('email', 'LIKE', '%' . $search . '%')
+                        ->orWhere('mobile', 'LIKE', '%' . $search . '%');
                 });
             }
 
@@ -2890,7 +2970,7 @@ public function getItemizedSalesReport(Request $request)
             $sortBy = $request->get('sort_by', 'created_at');
             $sortOrder = $request->get('sort_order', 'desc');
             $allowedSortFields = ['name', 'email', 'mobile', 'status', 'created_at'];
-            
+
             if (in_array($sortBy, $allowedSortFields)) {
                 $query->orderBy($sortBy, $sortOrder);
             }
@@ -2916,7 +2996,7 @@ public function getItemizedSalesReport(Request $request)
             'inquiry_id' => 'required|exists:user_inquiries,id',
             'status' => 'required|in:pending,contacted,completed,cancelled'
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
@@ -2944,7 +3024,7 @@ public function getItemizedSalesReport(Request $request)
     {
         try {
             $product = Product::findOrFail($id);
-            
+
             // Delete associated product images from storage
             $productImages = \App\Models\ProductImage::where('product_id', $id)->get();
             foreach ($productImages as $image) {
@@ -2953,18 +3033,18 @@ public function getItemizedSalesReport(Request $request)
                 }
                 $image->delete();
             }
-            
+
             // Delete the product
             $product->delete();
-            
+
             return response()->json([
-                'status' => true, 
+                'status' => true,
                 'message' => 'Product deleted successfully.'
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-                'status' => false, 
-                'message' => 'Failed to delete product.', 
+                'status' => false,
+                'message' => 'Failed to delete product.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -2975,14 +3055,14 @@ public function getItemizedSalesReport(Request $request)
         try {
             // Find the business by ID
             $business = Businesss::find($businessId);
-            
+
             if (!$business) {
                 return response()->json([
                     'status' => false,
                     'message' => 'Business not found.'
                 ], 404);
             }
-            
+
             // Return only the required fields
             $businessDetails = [
                 'id' => $business->id,
@@ -2993,13 +3073,13 @@ public function getItemizedSalesReport(Request $request)
                 'gst' => $business->gst,
                 'is_active' => $business->is_active
             ];
-            
+
             return response()->json([
                 'status' => true,
                 'message' => 'Business details retrieved successfully.',
                 'data' => $businessDetails
             ], 200);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
@@ -3043,7 +3123,7 @@ public function getItemizedSalesReport(Request $request)
                 $isLabelled = $request->input('is_labelled');
                 // Check if it's not "All" (-1)
                 if ($isLabelled !== null && $isLabelled != -1) {
-                     $query->where('is_labelled', $isLabelled);
+                    $query->where('is_labelled', $isLabelled);
                 }
             }
             // 2. Category (Product Type)
@@ -3084,7 +3164,7 @@ public function getItemizedSalesReport(Request $request)
             if ($request->has('orientation')) {
                 $orientation = $request->input('orientation');
                 if (!empty($orientation)) {
-                     $query->where('orientation', $orientation);
+                    $query->where('orientation', $orientation);
                 }
             }
             // 8. Stock Status
@@ -3093,13 +3173,13 @@ public function getItemizedSalesReport(Request $request)
                 if ($stockStatus == 'in_stock') {
                     $query->where('quantity', '>', 0);
                 } elseif ($stockStatus == 'out_of_stock') {
-                    $query->where(function($q) {
+                    $query->where(function ($q) {
                         $q->where('quantity', '<=', 0)
-                          ->orWhereNull('quantity');
+                            ->orWhereNull('quantity');
                     });
                 }
             }
-// 9. Framed/Unframed
+            // 9. Framed/Unframed
             if ($request->has('is_framed')) {
                 $isFramed = $request->input('is_framed');
                 // Allow 0 or 1
@@ -3108,20 +3188,30 @@ public function getItemizedSalesReport(Request $request)
                 }
             }
             // --- SORTING ---
-            
+
             $sortBy = $request->get('sort_by', 'id'); // Default to 'id' if not provided
             $sortOrder = $request->get('sort_order', 'desc'); // Default to 'desc'
-            
+
             // Validate sort order
             $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc']) ? strtolower($sortOrder) : 'desc';
-            
+
             // Validate sort_by field
             $allowedSortFields = [
-                'id', 'name', 'price', 'created_at', 'updated_at', 
-                'product_serial_number', 'artist_name', 'quantity',
-                'height', 'width', 'item_code', 'hsn_code', 'size'
+                'id',
+                'name',
+                'price',
+                'created_at',
+                'updated_at',
+                'product_serial_number',
+                'artist_name',
+                'quantity',
+                'height',
+                'width',
+                'item_code',
+                'hsn_code',
+                'size'
             ];
-            
+
             if (!in_array($sortBy, $allowedSortFields)) {
                 $sortBy = 'id'; // Fallback
             }
@@ -3133,14 +3223,14 @@ public function getItemizedSalesReport(Request $request)
                 $query->orderBy($sortBy, $sortOrder);
             }
             // --- PAGINATION ---
-            
+
             // Pagination - support both 'limit' and 'per_page' parameters
             $limit = $request->get('limit', $request->get('per_page', 50)); // Default upgraded to 50
             $page = $request->get('page', 1); // Default to page 1
-            
+
             // Validate limit (max 100 items per page for performance)
-            $limit = min(max((int)$limit, 1), 100);
-            
+            $limit = min(max((int) $limit, 1), 100);
+
             // Get products with pagination
             $products = $query->paginate($limit, ['*'], 'page', $page);
             return response()->json([
@@ -3233,13 +3323,13 @@ public function getItemizedSalesReport(Request $request)
                 $business_id = $request->business_id;
                 $extension = $file->getClientOriginalExtension();
                 $filename = 'business_' . $business_id . '_' . time() . '.' . $extension;
-                
+
                 // Store in public/business_logos directory
                 $path = $file->storeAs('public/business_logos', $filename);
-                
+
                 // Return the relative path to be stored in database
                 $relativePath = 'public/business_logos/' . $filename;
-                
+
                 return response()->json([
                     'status' => true,
                     'message' => 'Logo uploaded successfully',
@@ -3267,7 +3357,7 @@ public function getItemizedSalesReport(Request $request)
     {
         try {
             $userId = $request->get('userId');
-            
+
             if (!$userId) {
                 return response()->json([
                     'status' => false,
@@ -3276,7 +3366,7 @@ public function getItemizedSalesReport(Request $request)
             }
 
             $user = DB::table('shop_users')->where('id', $userId)->first();
-            
+
             if (!$user) {
                 return response()->json([
                     'status' => false,
@@ -3284,7 +3374,7 @@ public function getItemizedSalesReport(Request $request)
                 ], 404);
             }
 
-            $credits = isset($user->ai_image_left) ? (int)$user->ai_image_left : 20;
+            $credits = isset($user->ai_image_left) ? (int) $user->ai_image_left : 20;
 
             return response()->json([
                 'status' => true,
@@ -3306,7 +3396,7 @@ public function getItemizedSalesReport(Request $request)
         // Increase execution time for AI generation (can take 60+ seconds)
         set_time_limit(180); // 3 minutes
         ini_set('max_execution_time', 180);
-        
+
         try {
             $rules = [
                 'wall_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:10240', // 10MB max
@@ -3338,7 +3428,7 @@ public function getItemizedSalesReport(Request $request)
                 ], 404);
             }
 
-            $credits = isset($user->ai_image_left) ? (int)$user->ai_image_left : 20;
+            $credits = isset($user->ai_image_left) ? (int) $user->ai_image_left : 20;
             if ($credits <= 0) {
                 return response()->json([
                     'status' => false,
@@ -3347,9 +3437,11 @@ public function getItemizedSalesReport(Request $request)
             }
 
             // Get product and its original image (is_mockup=0)
-            $product = Product::with(['images' => function($query) {
-                $query->where('is_mockup', 0)->orderBy('id', 'ASC');
-            }])->findOrFail($productId);
+            $product = Product::with([
+                'images' => function ($query) {
+                    $query->where('is_mockup', 0)->orderBy('id', 'ASC');
+                }
+            ])->findOrFail($productId);
 
             if (!$product->images || $product->images->isEmpty()) {
                 return response()->json([
@@ -3359,7 +3451,7 @@ public function getItemizedSalesReport(Request $request)
             }
 
             $productImage = $product->images->first();
-            
+
             // Handle both storage path and URL paths
             $productImagePath = null;
             if (strpos($productImage->image, 'http') === 0) {
@@ -3369,7 +3461,7 @@ public function getItemizedSalesReport(Request $request)
                 if (!file_exists($tempDir)) {
                     mkdir($tempDir, 0777, true);
                 }
-                
+
                 $imageData = @file_get_contents($productImage->image);
                 if ($imageData) {
                     file_put_contents($tempPath, $imageData);
@@ -3378,7 +3470,7 @@ public function getItemizedSalesReport(Request $request)
             } else {
                 $productImagePath = storage_path('app/' . $productImage->image);
             }
-            
+
             if (!$productImagePath || !file_exists($productImagePath)) {
                 return response()->json([
                     'status' => false,
@@ -3394,11 +3486,11 @@ public function getItemizedSalesReport(Request $request)
                     'message' => 'Invalid wall image file'
                 ], 400);
             }
-            
+
             $wallImageName = 'wall_' . $userId . '_' . time() . '_' . uniqid() . '.' . $wallImageFile->getClientOriginalExtension();
             $wallImagePath = $wallImageFile->storeAs('public/ai_wall_images', $wallImageName);
             $wallImageFullPath = storage_path('app/' . $wallImagePath);
-            
+
             if (!file_exists($wallImageFullPath)) {
                 return response()->json([
                     'status' => false,
@@ -3438,10 +3530,10 @@ public function getItemizedSalesReport(Request $request)
             // Save AI generated image using Storage facade (consistent with other image uploads)
             $aiImageName = 'ai_generated_' . $userId . '_' . $productId . '_' . time() . '_' . uniqid() . '.jpg';
             $aiImagePath = 'public/ai_wall_images/' . $aiImageName;
-            
+
             // Use Storage::put() to save binary image data (like how expenses save base64 images)
             Storage::put($aiImagePath, $aiGeneratedImage);
-            
+
             // Verify the file was saved
             if (!Storage::exists($aiImagePath)) {
                 \Log::error("Failed to save AI generated image: {$aiImagePath}");
@@ -3498,7 +3590,7 @@ public function getItemizedSalesReport(Request $request)
             // Read and encode images
             $wallImageData = file_get_contents($wallImagePath);
             $productImageData = file_get_contents($productImagePath);
-            
+
             $wallImageBase64 = base64_encode($wallImageData);
             $productImageBase64 = base64_encode($productImageData);
 
@@ -3509,8 +3601,8 @@ public function getItemizedSalesReport(Request $request)
             }
 
             $isFramed = (isset($product->is_framed) && $product->is_framed == 1);
-            $frameInfo = $isFramed 
-                ? "This artwork has a frame. Make sure the same frame is visible in the final image and remove any black corners from the frame." 
+            $frameInfo = $isFramed
+                ? "This artwork has a frame. Make sure the same frame is visible in the final image and remove any black corners from the frame."
                 : "This is a frameless artwork (canvas or unframed print).";
 
             $prompt = "You are given two images:
@@ -3563,7 +3655,7 @@ Requirements:
             ];
 
             $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=" . $apiKey;
-            
+
             $ch = curl_init($url);
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($requestBody));
@@ -3572,18 +3664,25 @@ Requirements:
             curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Increased to 120 seconds for AI generation
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30); // Connection timeout
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            
+
             $result = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
             curl_close($ch);
 
+            \Log::info("Gemini API HTTP Code: {$httpCode}");
+            \Log::info("Gemini API Response: " . substr($result, 0, 1000)); // Log first 1000 chars
+
             if ($httpCode !== 200) {
-                \Log::error("Gemini API Error: HTTP {$httpCode}, Response: " . substr($result, 0, 500));
+                \Log::error("Gemini API Error: HTTP {$httpCode}, Response: " . $result);
+                if ($curlError) {
+                    \Log::error("CURL Error: " . $curlError);
+                }
                 return false;
             }
 
             $response = json_decode($result, true);
-            
+
             if (!isset($response['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
                 \Log::error("Gemini API: No image data in response");
                 return false;
@@ -3655,7 +3754,7 @@ Requirements:
             'product_id' => 'required|exists:products,id',
             'delete_mockup' => 'nullable|boolean',
         ];
-        
+
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return response()->json([
@@ -3667,32 +3766,32 @@ Requirements:
         try {
             // Find the product
             $product = Product::findOrFail($request->product_id);
-            
+
             // Set is_processed to 0
             $product->is_processed = 0;
             $product->save();
-            
+
             $deletedCount = 0;
-            
+
             // If delete_mockup is true, delete all mockup images
             if ($request->delete_mockup === true || $request->delete_mockup === 'true' || $request->delete_mockup === 1) {
                 // Get all mockup images for this product
                 $mockupImages = \App\Models\ProductImage::where('product_id', $product->id)
                     ->where('is_mockup', 1)
                     ->get();
-                
+
                 foreach ($mockupImages as $mockupImage) {
                     // Delete the file from storage if it exists
                     if (\Storage::exists($mockupImage->image)) {
                         \Storage::delete($mockupImage->image);
                     }
-                    
+
                     // Delete the database record
                     $mockupImage->delete();
                     $deletedCount++;
                 }
             }
-            
+
             return response()->json([
                 'status' => true,
                 'message' => 'Product processing reset successfully.',
@@ -3717,32 +3816,33 @@ Requirements:
         }
     }
     // INSTRUCTION: Add this method to your Admin.php controller class
-public function updateProductLabels(Request $request) {
-    try {
-        $ids = $request->input('ids');
-        $isLabelled = $request->input('is_labelled');
-        if (empty($ids) || !is_array($ids)) {
+    public function updateProductLabels(Request $request)
+    {
+        try {
+            $ids = $request->input('ids');
+            $isLabelled = $request->input('is_labelled');
+            if (empty($ids) || !is_array($ids)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid product IDs'
+                ], 400);
+            }
+            // Validate is_labelled is 0 or 1
+            $isLabelled = $isLabelled ? 1 : 0;
+            // Update products
+            DB::table('products')
+                ->whereIn('id', $ids)
+                ->update(['is_labelled' => $isLabelled]);
+            return response()->json([
+                'status' => true,
+                'message' => 'Products label updated successfully'
+            ]);
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Invalid product IDs'
-            ], 400);
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
         }
-        // Validate is_labelled is 0 or 1
-        $isLabelled = $isLabelled ? 1 : 0;
-        // Update products
-        DB::table('products')
-            ->whereIn('id', $ids)
-            ->update(['is_labelled' => $isLabelled]);
-        return response()->json([
-            'status' => true,
-            'message' => 'Products label updated successfully'
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Error: ' . $e->getMessage()
-        ], 500);
     }
-}
 
 }
