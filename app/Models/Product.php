@@ -29,6 +29,8 @@ class Product extends Model
         'is_temp',
         'orientation',
         'is_processed',
+        'is_labelled',
+        'is_ordered',
         'description',
         'suitable_for',
     ];

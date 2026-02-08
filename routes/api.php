@@ -18,16 +18,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post("/register",'App\Http\Controllers\AuthenticationController@register');
-Route::post("/login",'App\Http\Controllers\AuthenticationController@login');
-Route::post("/forgot",'App\Http\Controllers\AuthenticationController@forgot');
-Route::post("/updateprofile",'App\Http\Controllers\AuthenticationController@updateprofile');
+Route::post("/register", 'App\Http\Controllers\AuthenticationController@register');
+Route::post("/login", 'App\Http\Controllers\AuthenticationController@login');
+Route::post("/forgot", 'App\Http\Controllers\AuthenticationController@forgot');
+Route::post("/updateprofile", 'App\Http\Controllers\AuthenticationController@updateprofile');
 
 
 // Admin API's
-Route::post("/insertBusiness",'App\Http\Controllers\Admin@insertBusiness');
-Route::post("/insertLocation",'App\Http\Controllers\Admin@insertLocation');
-Route::post("/upload-business-logo",'App\Http\Controllers\Admin@uploadBusinessLogo');
+Route::post("/insertBusiness", 'App\Http\Controllers\Admin@insertBusiness');
+Route::post("/insertLocation", 'App\Http\Controllers\Admin@insertLocation');
+Route::post("/upload-business-logo", 'App\Http\Controllers\Admin@uploadBusinessLogo');
 
 // SaaS Plans & Billing
 Route::get('/public/plans', 'App\\Http\\Controllers\\PlanController@publicIndex');
@@ -44,48 +44,48 @@ Route::post('/webhooks/razorpay', 'App\\Http\\Controllers\\BillingController@web
 
 // User App API's
 
-Route::post("/createInvoice",'App\Http\Controllers\Admin@createInvoice');
-Route::get("/invoice/delete/{id}",'App\Http\Controllers\Admin@removeInvoice');
-Route::post("/editInvoice",'App\Http\Controllers\Admin@editInvoice');
-Route::get("/invoice/cancel/{id}",'App\Http\Controllers\Admin@cancelInvoice');
+Route::post("/createInvoice", 'App\Http\Controllers\Admin@createInvoice');
+Route::get("/invoice/delete/{id}", 'App\Http\Controllers\Admin@removeInvoice');
+Route::post("/editInvoice", 'App\Http\Controllers\Admin@editInvoice');
+Route::get("/invoice/cancel/{id}", 'App\Http\Controllers\Admin@cancelInvoice');
 
-Route::post("/addProduct",'App\Http\Controllers\Admin@addProduct');
-Route::post("/editProduct",'App\Http\Controllers\Admin@editProduct');
-Route::get("/item/delete/{item_id}",'App\Http\Controllers\Admin@removeItem');
+Route::post("/addProduct", 'App\Http\Controllers\Admin@addProduct');
+Route::post("/editProduct", 'App\Http\Controllers\Admin@editProduct');
+Route::get("/item/delete/{item_id}", 'App\Http\Controllers\Admin@removeItem');
 
 
-Route::post("/addAddress",'App\Http\Controllers\Admin@addAddress');
+Route::post("/addAddress", 'App\Http\Controllers\Admin@addAddress');
 
-Route::post("/addExpense",'App\Http\Controllers\Admin@addExpense');
-Route::get("/getAllExpenses",'App\Http\Controllers\Admin@getAllExpenses');
-Route::get("/getExpenseById",'App\Http\Controllers\Admin@getExpenseById');
-Route::get("/deleteExpense",'App\Http\Controllers\Admin@deleteExpense');
+Route::post("/addExpense", 'App\Http\Controllers\Admin@addExpense');
+Route::get("/getAllExpenses", 'App\Http\Controllers\Admin@getAllExpenses');
+Route::get("/getExpenseById", 'App\Http\Controllers\Admin@getExpenseById');
+Route::get("/deleteExpense", 'App\Http\Controllers\Admin@deleteExpense');
 
-Route::get("/getItemsByInvoiceId",'App\Http\Controllers\Admin@getItemsByInvoiceId');
-Route::get("/getAddressByInvoiceId",'App\Http\Controllers\Admin@getAddressByInvoiceId');
-Route::get("/getAllInvoices",'App\Http\Controllers\Admin@getAllInvoices');
-Route::get("/getDetailedInvoice/{invoiceId}",'App\Http\Controllers\Admin@getDetailedInvoice');
-Route::get("/getExistedUser",'App\Http\Controllers\Admin@getExistedUser');
-Route::get("/dashboardReport",'App\Http\Controllers\Admin@dashboardReport');
-Route::get("/getDetailedInvoiceWeb/{invoiceId}",'App\Http\Controllers\Admin@getDetailedInvoiceWeb');
-Route::get("/getBulkInvoicesWeb",'App\Http\Controllers\Admin@getBulkInvoicesWeb');
+Route::get("/getItemsByInvoiceId", 'App\Http\Controllers\Admin@getItemsByInvoiceId');
+Route::get("/getAddressByInvoiceId", 'App\Http\Controllers\Admin@getAddressByInvoiceId');
+Route::get("/getAllInvoices", 'App\Http\Controllers\Admin@getAllInvoices');
+Route::get("/getDetailedInvoice/{invoiceId}", 'App\Http\Controllers\Admin@getDetailedInvoice');
+Route::get("/getExistedUser", 'App\Http\Controllers\Admin@getExistedUser');
+Route::get("/dashboardReport", 'App\Http\Controllers\Admin@dashboardReport');
+Route::get("/getDetailedInvoiceWeb/{invoiceId}", 'App\Http\Controllers\Admin@getDetailedInvoiceWeb');
+Route::get("/getBulkInvoicesWeb", 'App\Http\Controllers\Admin@getBulkInvoicesWeb');
 
 
 
 
 
 // AFter Report Module
-Route::get("/getSaleReport",'App\Http\Controllers\Admin@getSaleReport');
-Route::get("/getExpenseReport",'App\Http\Controllers\Admin@getExpenseReport');
-Route::get("/getPurchaseSaleInvoice",'App\Http\Controllers\Admin@getPurchaseSaleInvoice');
-Route::get("/getInvoiceListReport",'App\Http\Controllers\Admin@getInvoiceListReport');
+Route::get("/getSaleReport", 'App\Http\Controllers\Admin@getSaleReport');
+Route::get("/getExpenseReport", 'App\Http\Controllers\Admin@getExpenseReport');
+Route::get("/getPurchaseSaleInvoice", 'App\Http\Controllers\Admin@getPurchaseSaleInvoice');
+Route::get("/getInvoiceListReport", 'App\Http\Controllers\Admin@getInvoiceListReport');
 
 
-Route::get("/getBulkInvoices",'App\Http\Controllers\Admin@getBulkInvoices');
-Route::post("/getBulkInvoicesSelected",'App\Http\Controllers\Admin@getBulkInvoicesSelected');
-Route::get("/getItemizedSalesReport",'App\Http\Controllers\Admin@getItemizedSalesReport');
-Route::get("/getlocations",'App\Http\Controllers\Admin@getlocations');
-Route::get("/getProducts",'App\Http\Controllers\Admin@getProducts');
+Route::get("/getBulkInvoices", 'App\Http\Controllers\Admin@getBulkInvoices');
+Route::post("/getBulkInvoicesSelected", 'App\Http\Controllers\Admin@getBulkInvoicesSelected');
+Route::get("/getItemizedSalesReport", 'App\Http\Controllers\Admin@getItemizedSalesReport');
+Route::get("/getlocations", 'App\Http\Controllers\Admin@getlocations');
+Route::get("/getProducts", 'App\Http\Controllers\Admin@getProducts');
 
 // Categories
 Route::post('/categories', 'App\\Http\\Controllers\\Admin@createCategory');
@@ -112,6 +112,9 @@ Route::post('/products/images/add', 'App\\Http\\Controllers\\Admin@addProductIma
 
 // Reset Product Processing
 Route::post('/products/reset-processing', 'App\\Http\\Controllers\\Admin@resetProductProcessing');
+
+// Update Product Order Status
+Route::post('/products/update-order-status', 'App\\Http\\Controllers\\Admin@updateProductOrderStatus');
 
 // Subscription Plan
 Route::get('/business/{business_id}/subscription-plan', 'App\\Http\\Controllers\\Admin@getBusinessSubscriptionPlan');

@@ -540,8 +540,9 @@ class Admin extends Controller
 
                 if ($product->is_temp == 0) {
                     $product->quantity = max($product->quantity - $request->quantity, 0);
-                    $product->save();
                 }
+                $product->is_ordered = 1;
+                $product->save();
             } else {
                 if (empty($request->name)) {
                     return response()->json(['status' => false, 'message' => 'Product name is required when product_id is not provided.'], 422);
@@ -599,9 +600,45 @@ class Admin extends Controller
             $product->quantity = $quantity;
         }
 
+        $product->is_ordered = 0;
         $product->save();
 
         return $product;
+    }
+
+    public function updateProductOrderStatus(Request $request)
+    {
+        $rules = [
+            'product_id' => 'required|exists:products,id',
+            'is_ordered' => 'required|integer|in:0,1',
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $product = Product::findOrFail($request->product_id);
+            $product->is_ordered = $request->is_ordered;
+            $product->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product order status updated successfully.',
+                'data' => [
+                    'product_id' => $product->id,
+                    'is_ordered' => $product->is_ordered
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update product order status.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     private function calculateItemPrice(Item $item, Invoice $invoice, $price, $isGst)
@@ -3200,9 +3237,9 @@ class Admin extends Controller
             if ($request->has('is_ordered')) {
                 $isOrdered = $request->input('is_ordered');
                 if ($isOrdered == 1) {
-                    $query->has('items');
+                    $query->where('is_ordered', 1);
                 } elseif ($isOrdered == 0) {
-                    $query->doesntHave('items');
+                    $query->where('is_ordered', 0);
                 }
             }
 
