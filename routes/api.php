@@ -100,6 +100,9 @@ Route::get('/product-categories/by-category', 'App\\Http\\Controllers\\Admin@get
 Route::post('/product-categories/update', 'App\\Http\\Controllers\\Admin@updateProductCategory');
 Route::delete('/product-categories/{id}', 'App\\Http\\Controllers\\Admin@deleteProductCategory');
 
+// Update Product Order Status (Support both GET and POST for ease of use)
+Route::match(['get', 'post'], '/products/update-order-status', 'App\\Http\\Controllers\\Admin@updateProductOrderStatus');
+
 // Products with images
 Route::post('/products', 'App\\Http\\Controllers\\Admin@createProductWithImages');
 Route::post('/products/update', 'App\\Http\\Controllers\\Admin@updateProductWithImages');
@@ -112,9 +115,6 @@ Route::post('/products/images/add', 'App\\Http\\Controllers\\Admin@addProductIma
 
 // Reset Product Processing
 Route::post('/products/reset-processing', 'App\\Http\\Controllers\\Admin@resetProductProcessing');
-
-// Update Product Order Status
-Route::post('/products/update-order-status', 'App\\Http\\Controllers\\Admin@updateProductOrderStatus');
 
 // Subscription Plan
 Route::get('/business/{business_id}/subscription-plan', 'App\\Http\\Controllers\\Admin@getBusinessSubscriptionPlan');

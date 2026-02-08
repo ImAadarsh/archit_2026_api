@@ -540,9 +540,8 @@ class Admin extends Controller
 
                 if ($product->is_temp == 0) {
                     $product->quantity = max($product->quantity - $request->quantity, 0);
+                    $product->save();
                 }
-                $product->is_ordered = 1;
-                $product->save();
             } else {
                 if (empty($request->name)) {
                     return response()->json(['status' => false, 'message' => 'Product name is required when product_id is not provided.'], 422);
@@ -608,9 +607,13 @@ class Admin extends Controller
 
     public function updateProductOrderStatus(Request $request)
     {
+        // Support parameters from both query string (GET) and request body (POST)
+        $productId = $request->input('product_id');
+        $isOrdered = $request->input('is_ordered');
+
         $rules = [
             'product_id' => 'required|exists:products,id',
-            'is_ordered' => 'required|integer|in:0,1',
+            'is_ordered' => 'nullable|integer|in:0,1',
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -620,8 +623,15 @@ class Admin extends Controller
         }
 
         try {
-            $product = Product::findOrFail($request->product_id);
-            $product->is_ordered = $request->is_ordered;
+            $product = Product::findOrFail($productId);
+
+            // If is_ordered is not provided, toggle the current status
+            if ($isOrdered === null) {
+                $product->is_ordered = $product->is_ordered == 1 ? 0 : 1;
+            } else {
+                $product->is_ordered = $isOrdered;
+            }
+
             $product->save();
 
             return response()->json([
