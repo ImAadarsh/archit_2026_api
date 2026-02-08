@@ -3187,6 +3187,25 @@ class Admin extends Controller
                     $query->where('is_framed', $isFramed);
                 }
             }
+
+            // 10. Quantity Range
+            if ($request->has('quantity_min')) {
+                $query->where('quantity', '>=', $request->input('quantity_min'));
+            }
+            if ($request->has('quantity_max')) {
+                $query->where('quantity', '<=', $request->input('quantity_max'));
+            }
+
+            // 11. Is Ordered Filter
+            if ($request->has('is_ordered')) {
+                $isOrdered = $request->input('is_ordered');
+                if ($isOrdered == 1) {
+                    $query->has('items');
+                } elseif ($isOrdered == 0) {
+                    $query->doesntHave('items');
+                }
+            }
+
             // --- SORTING ---
 
             $sortBy = $request->get('sort_by', 'id'); // Default to 'id' if not provided
