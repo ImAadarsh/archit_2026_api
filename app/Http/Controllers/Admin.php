@@ -1606,6 +1606,17 @@ class Admin extends Controller
 
     public function dashboardReport(Request $request)
     {
+        if (!$request->filled('business_id')) {
+            return response([
+                'status' => false,
+                'message' => 'business_id is required.'
+            ], 422);
+        }
+
+        $businessId = $request->business_id;
+        $locationId = $request->location_id;
+        $isAllLocations = !$request->filled('location_id') || $locationId === 'all' || $locationId === '0';
+
         // Helper function to apply date filters
         $applyDateFilters = function ($query) use ($request) {
             if ($request->has('day')) {
@@ -1623,14 +1634,28 @@ class Admin extends Controller
             }
         };
 
+        // Helper function to apply location filter only when a specific shop is selected
+        $applyLocationFilter = function ($query, $column) use ($isAllLocations, $locationId) {
+            if (!$isAllLocations) {
+                $query->where($column, $locationId);
+            }
+        };
+
         // Get Sale Report
-        $saleQuery = Invoice::query()->where('is_completed', 1)->where('business_id', $request->business_id)->where('location_id', $request->location_id);
+        $saleQuery = Invoice::query()
+            ->where('is_completed', 1)
+            ->where('business_id', $businessId);
+        $applyLocationFilter($saleQuery, 'location_id');
         $applyDateFilters($saleQuery);
         $sales = $saleQuery->orderBy('id', 'DESC')->get(['id', 'name', 'total_amount', 'invoice_date', 'type']);
         $actualSaleAmount = round($sales->sum('total_amount'), 2);
 
         // Get Purchase Sale Invoice Report
-        $purchaseSaleQuery = Invoice::query()->where('is_completed', 1)->where('type', 'normal')->where('business_id', $request->business_id)->where('location_id', $request->location_id);
+        $purchaseSaleQuery = Invoice::query()
+            ->where('is_completed', 1)
+            ->where('type', 'normal')
+            ->where('business_id', $businessId);
+        $applyLocationFilter($purchaseSaleQuery, 'location_id');
         $applyDateFilters($purchaseSaleQuery);
         $purchaseSales = $purchaseSaleQuery->get(['id', 'total_dgst', 'total_cgst', 'total_igst', 'total_amount']);
         $totalGst = round($purchaseSales->sum(function ($invoice) {
@@ -1641,16 +1666,17 @@ class Admin extends Controller
         // Get Invoice Report (Item Purchases)
         $itemQuery = Item::query()
             ->join('invoices', 'items.invoice_id', '=', 'invoices.id')
-            ->where('invoices.business_id', $request->business_id)
-            ->where('invoices.location_id', $request->location_id)
+            ->where('invoices.business_id', $businessId)
             ->where('invoices.is_completed', 1)
             ->where('invoices.type', 'normal');
+        $applyLocationFilter($itemQuery, 'invoices.location_id');
         $applyDateFilters($itemQuery);
         $items = $itemQuery->get(['items.quantity']);
         $totalItemsPurchased = $items->sum('quantity');
 
         // Get Expenses Report
-        $expenseQuery = Expenses::query()->where('business_id', $request->business_id)->where('location_id', $request->location_id);
+        $expenseQuery = Expenses::query()->where('business_id', $businessId);
+        $applyLocationFilter($expenseQuery, 'location_id');
         // Apply date filters to expenses (assuming expenses have a 'created_at' field)
         if ($request->has('day')) {
             $expenseQuery->whereDate('created_at', $request->day);
@@ -1659,7 +1685,8 @@ class Admin extends Controller
             $expenseQuery->whereMonth('created_at', $request->month);
         }
         if ($request->has('week_start') && $request->has('week_end')) {
-            $expenseQuery->whereBetween('created_at', [$request->week_start, $request->week_end]);
+            $expenseQuery->whereDate('created_at', '>=', $request->week_start)
+                ->whereDate('created_at', '<=', $request->week_end);
         }
         if ($request->has('year')) {
             $expenseQuery->whereYear('created_at', $request->year);
@@ -1674,7 +1701,9 @@ class Admin extends Controller
             'total_expense' => $totalAmount,
             'total_gst' => $totalGst,
             'total_items_purchased' => $totalItemsPurchased,
-            'profit_loss' => null
+            'profit_loss' => null,
+            'location_scope' => $isAllLocations ? 'all' : 'single',
+            'location_id' => $isAllLocations ? null : $locationId
         ];
 
         return response([
