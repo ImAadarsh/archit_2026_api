@@ -60,6 +60,7 @@ Route::post("/addExpense", 'App\Http\Controllers\Admin@addExpense');
 Route::get("/getAllExpenses", 'App\Http\Controllers\Admin@getAllExpenses');
 Route::get("/getExpenseById", 'App\Http\Controllers\Admin@getExpenseById');
 Route::get("/deleteExpense", 'App\Http\Controllers\Admin@deleteExpense');
+Route::get("/downloadExpenseReceiptsZip", 'App\Http\Controllers\Admin@downloadExpenseReceiptsZip');
 
 Route::get("/getItemsByInvoiceId", 'App\Http\Controllers\Admin@getItemsByInvoiceId');
 Route::get("/getAddressByInvoiceId", 'App\Http\Controllers\Admin@getAddressByInvoiceId');

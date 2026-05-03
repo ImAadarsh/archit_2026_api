@@ -957,8 +957,12 @@ class Admin extends Controller
     {
         $rules = [
             'name' => 'required',
-            'amount' => 'required',
-            'type' => 'required',
+            'amount' => 'nullable|numeric',
+            'taxable_amount' => 'nullable|numeric',
+            'gst_amount' => 'nullable|numeric',
+            'paid_to' => 'nullable|string|max:255',
+            'gst_number' => 'nullable|string|max:32',
+            'type' => 'nullable|numeric',
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -968,17 +972,35 @@ class Admin extends Controller
         }
 
         try {
+            $taxable = $request->input('taxable_amount');
+            $gstAmt = $request->input('gst_amount');
+            if ($taxable !== null && $taxable !== '' && $gstAmt !== null && $gstAmt !== '') {
+                $computedAmount = (float) $taxable + (float) $gstAmt;
+            } else {
+                $computedAmount = (float) $request->input('amount', 0);
+            }
+            $finalAmount = $request->input('amount');
+            if ($finalAmount === null || $finalAmount === '') {
+                $finalAmount = $computedAmount;
+            }
+
             if ($expense = Expenses::find($request->id)) {
                 $expense->name = $request->name;
-                $expense->amount = $request->amount;
-                $expense->type = $request->type;
+                $expense->paid_to = $request->input('paid_to');
+                $expense->gst_number = $request->input('gst_number');
+                $expense->taxable_amount = $taxable !== null && $taxable !== '' ? $taxable : null;
+                $expense->gst_amount = $gstAmt !== null && $gstAmt !== '' ? $gstAmt : null;
+                $expense->amount = $finalAmount;
+                if ($request->has('type')) {
+                    $expense->type = $request->type;
+                }
                 $expense->business_id = $request->business_id;
                 $expense->location_id = $request->location_id;
                 $expense->user_id = $request->user_id;
                 $expense->save();
                 $expense->find($expense->id);
                 if ($request->has('file')) {
-                    $fileData = $request->file; // base64 encoded file data
+                    $fileData = $request->file;
                     $fileName = 'expense_' . time() . '.' . $this->getFileExtension($fileData) . '.' . $request->extension;
                     $filePath = 'public/expense/' . $fileName;
                     \Storage::put($filePath, base64_decode($fileData));
@@ -989,15 +1011,21 @@ class Admin extends Controller
             } else {
                 $expense = new Expenses();
                 $expense->name = $request->name;
-                $expense->amount = $request->amount;
-                $expense->type = $request->type;
+                $expense->paid_to = $request->input('paid_to');
+                $expense->gst_number = $request->input('gst_number');
+                $expense->taxable_amount = $taxable !== null && $taxable !== '' ? $taxable : null;
+                $expense->gst_amount = $gstAmt !== null && $gstAmt !== '' ? $gstAmt : null;
+                $expense->amount = $finalAmount;
+                if ($request->has('type')) {
+                    $expense->type = $request->type;
+                }
                 $expense->business_id = $request->business_id;
                 $expense->location_id = $request->location_id;
                 $expense->user_id = $request->user_id;
                 $expense->save();
                 $expense->find($expense->id);
                 if ($request->has('file')) {
-                    $fileData = $request->file; // base64 encoded file data
+                    $fileData = $request->file;
                     $fileName = 'expense_' . $expense->id . '.' . $request->extension;
                     $filePath = 'public/expense/' . $fileName;
                     \Storage::put($filePath, base64_decode($fileData));
@@ -1018,6 +1046,63 @@ class Admin extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * ZIP of receipt images/files for selected expense IDs (same business/location scope as list).
+     */
+    public function downloadExpenseReceiptsZip(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'ids' => 'required|string',
+            'business_id' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        $ids = array_values(array_filter(array_map('intval', explode(',', $request->ids))));
+        if (empty($ids)) {
+            return response()->json(['status' => false, 'message' => 'No valid ids'], 400);
+        }
+
+        $query = Expenses::whereIn('id', $ids)->where('business_id', $request->business_id);
+        if ($request->filled('location_id')) {
+            $query->where('location_id', $request->location_id);
+        }
+        $expenses = $query->get();
+
+        $tempDir = storage_path('app/temp');
+        if (!is_dir($tempDir)) {
+            @mkdir($tempDir, 0755, true);
+        }
+        $zipPath = $tempDir . '/expense_receipts_' . uniqid('', true) . '.zip';
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['status' => false, 'message' => 'Could not create zip archive'], 500);
+        }
+
+        $added = 0;
+        foreach ($expenses as $expense) {
+            if (empty($expense->file)) {
+                continue;
+            }
+            $abs = storage_path('app/' . $expense->file);
+            if (is_file($abs)) {
+                $zip->addFile($abs, 'expense_' . $expense->id . '_' . basename($expense->file));
+                $added++;
+            }
+        }
+        $zip->close();
+
+        if ($added === 0 || !is_file($zipPath)) {
+            @unlink($zipPath);
+            return response()->json(['status' => false, 'message' => 'No receipt files found for selection'], 404);
+        }
+
+        return response()->download($zipPath, 'expense_receipts.zip')->deleteFileAfterSend(true);
     }
     public function getAllExpenses(Request $request)
     {
@@ -1315,6 +1400,8 @@ class Admin extends Controller
             $params[] = "business_id=" . $request->business_id;
         if ($request->location_id)
             $params[] = "location_id=" . $request->location_id;
+        if ($request->filled('expense_ids'))
+            $params[] = "expense_ids=" . urlencode($request->expense_ids);
 
         $query_string = implode("&", $params);
 
