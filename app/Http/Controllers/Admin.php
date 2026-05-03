@@ -1780,6 +1780,30 @@ class Admin extends Controller
         }
         $expenses = $expenseQuery->get();
         $totalAmount = round($expenses->sum('amount'), 2);
+        $gstPaidOnExpenses = round($expenses->sum(function ($e) {
+            return (float) ($e->gst_amount ?? 0);
+        }), 2);
+        // Taxable portion of expenses ("Cash Paid" bucket); legacy rows without GST split count as 0 to avoid duplicating total_expense.
+        $cashPaidTaxableExpenses = round($expenses->sum(function ($e) {
+            if ($e->taxable_amount !== null && $e->taxable_amount !== '') {
+                return (float) $e->taxable_amount;
+            }
+            $gst = (float) ($e->gst_amount ?? 0);
+            $amt = (float) ($e->amount ?? 0);
+            if ($gst > 0) {
+                return max(0, $amt - $gst);
+            }
+            return 0;
+        }), 2);
+
+        // Cash-mode sales (collections)
+        $cashSaleQuery = Invoice::query()
+            ->where('is_completed', 1)
+            ->where('business_id', $businessId);
+        $applyLocationFilter($cashSaleQuery, 'location_id');
+        $applyDateFilters($cashSaleQuery);
+        $cashSaleQuery->whereRaw('LOWER(COALESCE(payment_mode, "")) = ?', ['cash']);
+        $cashCollected = round((float) $cashSaleQuery->sum('total_amount'), 2);
 
         // Prepare response data
         $data = [
@@ -1787,6 +1811,10 @@ class Admin extends Controller
             'total_excluding_gst' => $totalExcludingGst,
             'total_expense' => $totalAmount,
             'total_gst' => $totalGst,
+            'gst_collected' => $totalGst,
+            'gst_paid' => $gstPaidOnExpenses,
+            'cash_collected' => $cashCollected,
+            'cash_paid' => $cashPaidTaxableExpenses,
             'total_items_purchased' => $totalItemsPurchased,
             'profit_loss' => null,
             'location_scope' => $isAllLocations ? 'all' : 'single',
