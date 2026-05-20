@@ -953,6 +953,28 @@ class Admin extends Controller
         $extension = explode('/', $mime)[1];
         return $extension;
     }
+    /**
+     * Day / month / week / year filters for expenses: use user-entered expense_date when set, else created_at.
+     */
+    private function applyExpenseReportDateFilters($query, Request $request): void
+    {
+        if ($request->has('day')) {
+            $query->whereRaw('DATE(COALESCE(expense_date, created_at)) = ?', [$request->day]);
+        }
+        if ($request->has('month')) {
+            $query->whereRaw('MONTH(COALESCE(expense_date, created_at)) = ?', [$request->month]);
+        }
+        if ($request->has('week_start') && $request->has('week_end')) {
+            $query->whereRaw(
+                'DATE(COALESCE(expense_date, created_at)) >= DATE(?) AND DATE(COALESCE(expense_date, created_at)) <= DATE(?)',
+                [$request->week_start, $request->week_end]
+            );
+        }
+        if ($request->has('year')) {
+            $query->whereRaw('YEAR(COALESCE(expense_date, created_at)) = ?', [$request->year]);
+        }
+    }
+
     public function addExpense(Request $request)
     {
         $rules = [
@@ -963,6 +985,7 @@ class Admin extends Controller
             'paid_to' => 'nullable|string|max:255',
             'gst_number' => 'nullable|string|max:32',
             'type' => 'nullable|numeric',
+            'expense_date' => 'nullable|date',
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -991,6 +1014,9 @@ class Admin extends Controller
                 $expense->taxable_amount = $taxable !== null && $taxable !== '' ? $taxable : null;
                 $expense->gst_amount = $gstAmt !== null && $gstAmt !== '' ? $gstAmt : null;
                 $expense->amount = $finalAmount;
+                if ($request->filled('expense_date')) {
+                    $expense->expense_date = $request->input('expense_date');
+                }
                 if ($request->has('type')) {
                     $expense->type = $request->type;
                 }
@@ -1022,6 +1048,9 @@ class Admin extends Controller
                 $expense->business_id = $request->business_id;
                 $expense->location_id = $request->location_id;
                 $expense->user_id = $request->user_id;
+                $expense->expense_date = $request->filled('expense_date')
+                    ? $request->input('expense_date')
+                    : now()->format('Y-m-d');
                 $expense->save();
                 $expense->find($expense->id);
                 if ($request->has('file')) {
@@ -1108,15 +1137,7 @@ class Admin extends Controller
     {
         $query = Expenses::query();
 
-        // Filter by day
-        if ($request->has('day')) {
-            $query->whereDate('created_at', $request->day);
-        }
-
-        // Filter by month
-        if ($request->has('month')) {
-            $query->whereMonth('created_at', $request->month);
-        }
+        $this->applyExpenseReportDateFilters($query, $request);
 
         // Apply payment mode filter if provided
         if ($request->has('business_id')) {
@@ -1125,17 +1146,6 @@ class Admin extends Controller
         // Apply payment mode filter if provided
         if ($request->has('location_id')) {
             $query->where('location_id', $request->location_id);
-        }
-
-        // Filter by week
-        if ($request->has('week_start')) {
-            // Assuming the week is passed as an array with start and end dates
-            $query->whereBetween('created_at', [$request->week_start, $request->week_end]);
-        }
-
-        // Filter by year
-        if ($request->has('year')) {
-            $query->whereYear('created_at', $request->year);
         }
 
         // Filter by expense type (0 or 1)
@@ -1315,26 +1325,7 @@ class Admin extends Controller
     {
         $query = Expenses::query();
 
-        // Filter by day
-        if ($request->has('day')) {
-            $query->whereDate('created_at', $request->day);
-        }
-
-        // Filter by month
-        if ($request->has('month')) {
-            $query->whereMonth('created_at', $request->month);
-        }
-
-        // Filter by week
-        if ($request->has('week_start')) {
-            // Assuming the week is passed as an array with start and end dates
-            $query->whereBetween('created_at', [$request->week_start, $request->week_end]);
-        }
-
-        // Filter by year
-        if ($request->has('year')) {
-            $query->whereYear('created_at', $request->year);
-        }
+        $this->applyExpenseReportDateFilters($query, $request);
 
         // Filter by expense type (0 or 1)
         if ($request->has('type')) {
@@ -1764,20 +1755,7 @@ class Admin extends Controller
         // Get Expenses Report
         $expenseQuery = Expenses::query()->where('business_id', $businessId);
         $applyLocationFilter($expenseQuery, 'location_id');
-        // Apply date filters to expenses (assuming expenses have a 'created_at' field)
-        if ($request->has('day')) {
-            $expenseQuery->whereDate('created_at', $request->day);
-        }
-        if ($request->has('month')) {
-            $expenseQuery->whereMonth('created_at', $request->month);
-        }
-        if ($request->has('week_start') && $request->has('week_end')) {
-            $expenseQuery->whereDate('created_at', '>=', $request->week_start)
-                ->whereDate('created_at', '<=', $request->week_end);
-        }
-        if ($request->has('year')) {
-            $expenseQuery->whereYear('created_at', $request->year);
-        }
+        $this->applyExpenseReportDateFilters($expenseQuery, $request);
         $expenses = $expenseQuery->get();
         $totalAmount = round($expenses->sum('amount'), 2);
         $gstPaidOnExpenses = round($expenses->sum(function ($e) {

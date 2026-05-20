@@ -21,5 +21,10 @@ class Expenses extends Model
         'business_id',
         'location_id',
         'user_id',
+        'expense_date',
+    ];
+
+    protected $casts = [
+        'expense_date' => 'date',
     ];
 }
