@@ -15,6 +15,7 @@ use App\Models\UserInquiry;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 
@@ -956,23 +957,65 @@ class Admin extends Controller
     /**
      * Day / month / week / year filters for expenses: use user-entered expense_date when set, else created_at.
      */
+    private function expenseReportDateExpression(): string
+    {
+        return Schema::hasColumn('expenses', 'expense_date')
+            ? 'COALESCE(expense_date, created_at)'
+            : 'created_at';
+    }
+
     private function applyExpenseReportDateFilters($query, Request $request): void
     {
+        $dateExpr = $this->expenseReportDateExpression();
+
         if ($request->has('day')) {
-            $query->whereRaw('DATE(COALESCE(expense_date, created_at)) = ?', [$request->day]);
+            $query->whereRaw("DATE({$dateExpr}) = ?", [$request->day]);
         }
         if ($request->has('month')) {
-            $query->whereRaw('MONTH(COALESCE(expense_date, created_at)) = ?', [$request->month]);
+            $query->whereRaw("MONTH({$dateExpr}) = ?", [$request->month]);
         }
         if ($request->has('week_start') && $request->has('week_end')) {
             $query->whereRaw(
-                'DATE(COALESCE(expense_date, created_at)) >= DATE(?) AND DATE(COALESCE(expense_date, created_at)) <= DATE(?)',
+                "DATE({$dateExpr}) >= DATE(?) AND DATE({$dateExpr}) <= DATE(?)",
                 [$request->week_start, $request->week_end]
             );
         }
         if ($request->has('year')) {
-            $query->whereRaw('YEAR(COALESCE(expense_date, created_at)) = ?', [$request->year]);
+            $query->whereRaw("YEAR({$dateExpr}) = ?", [$request->year]);
         }
+    }
+
+    private function applyExpensePayload(Expenses $expense, Request $request, $taxable, $gstAmt, $finalAmount, bool $isNew): void
+    {
+        $expense->name = $request->name;
+        $expense->amount = $finalAmount;
+
+        if (Schema::hasColumn('expenses', 'paid_to')) {
+            $expense->paid_to = $request->input('paid_to');
+        }
+        if (Schema::hasColumn('expenses', 'gst_number')) {
+            $expense->gst_number = $request->input('gst_number');
+        }
+        if (Schema::hasColumn('expenses', 'taxable_amount')) {
+            $expense->taxable_amount = $taxable !== null && $taxable !== '' ? $taxable : null;
+        }
+        if (Schema::hasColumn('expenses', 'gst_amount')) {
+            $expense->gst_amount = $gstAmt !== null && $gstAmt !== '' ? $gstAmt : null;
+        }
+        if ($request->has('type') && Schema::hasColumn('expenses', 'type')) {
+            $expense->type = $request->type;
+        }
+        if (Schema::hasColumn('expenses', 'expense_date')) {
+            if ($request->filled('expense_date')) {
+                $expense->expense_date = $request->input('expense_date');
+            } elseif ($isNew) {
+                $expense->expense_date = now()->format('Y-m-d');
+            }
+        }
+
+        $expense->business_id = $request->business_id;
+        $expense->location_id = $request->location_id;
+        $expense->user_id = $request->user_id;
     }
 
     public function addExpense(Request $request)
@@ -991,7 +1034,11 @@ class Admin extends Controller
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
-            return $validator->errors();
+            return response([
+                'status' => false,
+                'message' => 'Validation failed.',
+                'errors' => $validator->errors(),
+            ], 422);
         }
 
         try {
@@ -1008,59 +1055,28 @@ class Admin extends Controller
             }
 
             if ($expense = Expenses::find($request->id)) {
-                $expense->name = $request->name;
-                $expense->paid_to = $request->input('paid_to');
-                $expense->gst_number = $request->input('gst_number');
-                $expense->taxable_amount = $taxable !== null && $taxable !== '' ? $taxable : null;
-                $expense->gst_amount = $gstAmt !== null && $gstAmt !== '' ? $gstAmt : null;
-                $expense->amount = $finalAmount;
-                if ($request->filled('expense_date')) {
-                    $expense->expense_date = $request->input('expense_date');
-                }
-                if ($request->has('type')) {
-                    $expense->type = $request->type;
-                }
-                $expense->business_id = $request->business_id;
-                $expense->location_id = $request->location_id;
-                $expense->user_id = $request->user_id;
+                $this->applyExpensePayload($expense, $request, $taxable, $gstAmt, $finalAmount, false);
                 $expense->save();
-                $expense->find($expense->id);
                 if ($request->has('file')) {
                     $fileData = $request->file;
                     $fileName = 'expense_' . time() . '.' . $this->getFileExtension($fileData) . '.' . $request->extension;
                     $filePath = 'public/expense/' . $fileName;
                     \Storage::put($filePath, base64_decode($fileData));
                     $expense->file = $filePath;
+                    $expense->save();
                 }
-
-                $expense->save();
             } else {
                 $expense = new Expenses();
-                $expense->name = $request->name;
-                $expense->paid_to = $request->input('paid_to');
-                $expense->gst_number = $request->input('gst_number');
-                $expense->taxable_amount = $taxable !== null && $taxable !== '' ? $taxable : null;
-                $expense->gst_amount = $gstAmt !== null && $gstAmt !== '' ? $gstAmt : null;
-                $expense->amount = $finalAmount;
-                if ($request->has('type')) {
-                    $expense->type = $request->type;
-                }
-                $expense->business_id = $request->business_id;
-                $expense->location_id = $request->location_id;
-                $expense->user_id = $request->user_id;
-                $expense->expense_date = $request->filled('expense_date')
-                    ? $request->input('expense_date')
-                    : now()->format('Y-m-d');
+                $this->applyExpensePayload($expense, $request, $taxable, $gstAmt, $finalAmount, true);
                 $expense->save();
-                $expense->find($expense->id);
                 if ($request->has('file')) {
                     $fileData = $request->file;
                     $fileName = 'expense_' . $expense->id . '.' . $request->extension;
                     $filePath = 'public/expense/' . $fileName;
                     \Storage::put($filePath, base64_decode($fileData));
                     $expense->file = $filePath;
+                    $expense->save();
                 }
-                $expense->save();
             }
 
             return response([
