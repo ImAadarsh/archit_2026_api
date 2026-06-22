@@ -143,3 +143,8 @@ Route::get('/ai-wall-images/credits', [App\Http\Controllers\Admin::class, 'getAi
 Route::post('/ai-wall-images/generate', [App\Http\Controllers\Admin::class, 'generateAiWallImage']);
 Route::get('/ai-wall-images/list', [App\Http\Controllers\Admin::class, 'getAiWallImages']);
 Route::post('products/update-labels', [App\Http\Controllers\Admin::class, 'updateProductLabels']);
+
+// Storage management (superadmin)
+Route::get('/storage/overview', [App\Http\Controllers\Admin::class, 'getStorageOverview']);
+Route::get('/storage/product-images', [App\Http\Controllers\Admin::class, 'getProductImageStorage']);
+Route::post('/storage/product-images/cleanup', [App\Http\Controllers\Admin::class, 'cleanupOrphanProductImages']);

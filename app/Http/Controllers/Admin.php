@@ -4019,6 +4019,389 @@ Requirements:
             ], 500);
         }
     }
+    private function storagePublicBaseUrl(): string
+    {
+        return rtrim(env('STORAGE_PUBLIC_URL', 'https://api.invoicemate.in/storage/app'), '/');
+    }
+
+    private function shopProductBaseUrl(): string
+    {
+        return rtrim(env('SHOP_PRODUCT_URL', 'https://architartgallery.in/artwork'), '/');
+    }
+
+    private function normalizeStoragePath(?string $path): ?string
+    {
+        if (!$path || strpos($path, 'http') === 0) {
+            return null;
+        }
+
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+
+        if (strpos($path, 'public/') !== 0) {
+            $path = 'public/product_images/' . basename($path);
+        }
+
+        return $path;
+    }
+
+    private function buildStorageUrl(?string $path): ?string
+    {
+        $normalized = $this->normalizeStoragePath($path);
+        if (!$normalized) {
+            return is_string($path) && strpos($path, 'http') === 0 ? $path : null;
+        }
+
+        return $this->storagePublicBaseUrl() . '/' . $normalized;
+    }
+
+    private function getTrackedProductImagePaths(): array
+    {
+        $paths = [];
+
+        foreach (\App\Models\ProductImage::pluck('image') as $imagePath) {
+            $normalized = $this->normalizeStoragePath($imagePath);
+            if ($normalized) {
+                $paths[$normalized] = true;
+                $paths[basename($normalized)] = true;
+            }
+        }
+
+        return $paths;
+    }
+
+    private function scanProductImageFiles(): array
+    {
+        $directory = storage_path('app/public/product_images');
+        if (!is_dir($directory)) {
+            return [];
+        }
+
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            if (!$file->isFile()) {
+                continue;
+            }
+
+            $relativePath = 'public/product_images/' . $file->getFilename();
+            $files[] = [
+                'path' => $relativePath,
+                'filename' => $file->getFilename(),
+                'size' => $file->getSize(),
+                'modified_at' => date('Y-m-d H:i:s', $file->getMTime()),
+                'url' => $this->buildStorageUrl($relativePath),
+            ];
+        }
+
+        usort($files, fn ($a, $b) => strcmp($b['modified_at'], $a['modified_at']));
+
+        return $files;
+    }
+
+    private function getStorageFolderStats(string $relativePath): array
+    {
+        $fullPath = storage_path('app/' . ltrim($relativePath, '/'));
+        $fileCount = 0;
+        $totalSize = 0;
+
+        if (is_dir($fullPath)) {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($fullPath, \FilesystemIterator::SKIP_DOTS)
+            );
+
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $fileCount++;
+                    $totalSize += $file->getSize();
+                }
+            }
+        }
+
+        return [
+            'folder' => $relativePath,
+            'exists' => is_dir($fullPath),
+            'file_count' => $fileCount,
+            'total_size_bytes' => $totalSize,
+            'total_size_mb' => round($totalSize / 1024 / 1024, 2),
+        ];
+    }
+
+    public function getStorageOverview()
+    {
+        try {
+            $folders = [
+                'public/product_images',
+                'public/logo',
+                'public/ai_wall_images',
+                'public/expenses',
+                'temp',
+            ];
+
+            $overview = array_map(fn ($folder) => $this->getStorageFolderStats($folder), $folders);
+
+            $orphanDbCount = DB::table('product_images as pi')
+                ->leftJoin('products as p', 'pi.product_id', '=', 'p.id')
+                ->whereNull('p.id')
+                ->count();
+
+            $trackedPaths = $this->getTrackedProductImagePaths();
+            $diskFiles = $this->scanProductImageFiles();
+            $orphanFileCount = 0;
+
+            foreach ($diskFiles as $file) {
+                if (!isset($trackedPaths[$file['path']]) && !isset($trackedPaths[$file['filename']])) {
+                    $orphanFileCount++;
+                }
+            }
+
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'folders' => $overview,
+                    'product_images' => [
+                        'db_records' => \App\Models\ProductImage::count(),
+                        'disk_files' => count($diskFiles),
+                        'orphan_db_records' => $orphanDbCount,
+                        'orphan_disk_files' => $orphanFileCount,
+                    ],
+                    'storage_base_url' => $this->storagePublicBaseUrl(),
+                    'shop_product_base_url' => $this->shopProductBaseUrl(),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to load storage overview.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getProductImageStorage(Request $request)
+    {
+        try {
+            $filter = $request->get('filter', 'all');
+            $page = max(1, (int) $request->get('page', 1));
+            $perPage = min(200, max(20, (int) $request->get('per_page', 50)));
+
+            $rows = DB::table('product_images as pi')
+                ->leftJoin('products as p', 'pi.product_id', '=', 'p.id')
+                ->select(
+                    'pi.id',
+                    'pi.product_id',
+                    'pi.image',
+                    'pi.is_mockup',
+                    'pi.just_product',
+                    'pi.created_at',
+                    'p.name as product_name'
+                )
+                ->orderByDesc('pi.id')
+                ->get()
+                ->map(function ($row) {
+                    $normalizedPath = $this->normalizeStoragePath($row->image);
+                    $hasProduct = !is_null($row->product_name);
+                    $fileExists = $normalizedPath ? Storage::exists($normalizedPath) : false;
+
+                    return [
+                        'id' => $row->id,
+                        'product_id' => $row->product_id,
+                        'product_name' => $row->product_name,
+                        'image_path' => $row->image,
+                        'image_url' => $this->buildStorageUrl($row->image),
+                        'product_url' => $hasProduct
+                            ? $this->shopProductBaseUrl() . '/' . $row->product_id
+                            : null,
+                        'status' => $hasProduct ? 'linked' : 'orphan_db',
+                        'file_exists' => $fileExists,
+                        'is_mockup' => (int) $row->is_mockup,
+                        'just_product' => (int) $row->just_product,
+                        'created_at' => $row->created_at,
+                    ];
+                });
+
+            $trackedPaths = $this->getTrackedProductImagePaths();
+            $diskOrphans = [];
+
+            foreach ($this->scanProductImageFiles() as $file) {
+                if (isset($trackedPaths[$file['path']]) || isset($trackedPaths[$file['filename']])) {
+                    continue;
+                }
+
+                $diskOrphans[] = array_merge($file, [
+                    'id' => null,
+                    'product_id' => null,
+                    'product_name' => null,
+                    'product_url' => null,
+                    'status' => 'orphan_file',
+                    'file_exists' => true,
+                ]);
+            }
+
+            $combined = $rows->toArray();
+
+            if ($filter === 'linked') {
+                $combined = array_values(array_filter($combined, fn ($item) => $item['status'] === 'linked'));
+            } elseif ($filter === 'orphan') {
+                $combined = array_values(array_filter(
+                    $combined,
+                    fn ($item) => $item['status'] === 'orphan_db' || !$item['file_exists']
+                ));
+                $combined = array_merge($combined, $diskOrphans);
+            } elseif ($filter === 'orphan_file') {
+                $combined = $diskOrphans;
+            } elseif ($filter === 'orphan_db') {
+                $combined = array_values(array_filter($combined, fn ($item) => $item['status'] === 'orphan_db'));
+            }
+
+            $total = count($combined);
+            $offset = ($page - 1) * $perPage;
+            $paged = array_slice($combined, $offset, $perPage);
+
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'items' => $paged,
+                    'pagination' => [
+                        'page' => $page,
+                        'per_page' => $perPage,
+                        'total' => $total,
+                        'total_pages' => (int) ceil($total / max($perPage, 1)),
+                    ],
+                    'counts' => [
+                        'linked' => $rows->where('status', 'linked')->count(),
+                        'orphan_db' => $rows->where('status', 'orphan_db')->count(),
+                        'orphan_file' => count($diskOrphans),
+                        'missing_file' => $rows->where('file_exists', false)->count(),
+                    ],
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to load product image storage.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function cleanupOrphanProductImages(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'types' => 'nullable|array',
+            'types.*' => 'in:db_orphan,file_orphan,missing_file',
+            'dry_run' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 400);
+        }
+
+        try {
+            $types = $request->input('types', ['db_orphan', 'file_orphan']);
+            $dryRun = (bool) $request->input('dry_run', false);
+
+            $deleted = [
+                'db_orphan_records' => 0,
+                'db_orphan_files' => 0,
+                'file_orphans' => 0,
+                'missing_file_records' => 0,
+            ];
+            $details = [];
+
+            if (in_array('db_orphan', $types, true)) {
+                $orphanRows = DB::table('product_images as pi')
+                    ->leftJoin('products as p', 'pi.product_id', '=', 'p.id')
+                    ->whereNull('p.id')
+                    ->select('pi.id', 'pi.image')
+                    ->get();
+
+                foreach ($orphanRows as $row) {
+                    $normalizedPath = $this->normalizeStoragePath($row->image);
+                    $details[] = [
+                        'type' => 'db_orphan',
+                        'image_id' => $row->id,
+                        'path' => $row->image,
+                    ];
+
+                    if (!$dryRun) {
+                        if ($normalizedPath && Storage::exists($normalizedPath)) {
+                            Storage::delete($normalizedPath);
+                            $deleted['db_orphan_files']++;
+                        }
+                        \App\Models\ProductImage::where('id', $row->id)->delete();
+                        $deleted['db_orphan_records']++;
+                    }
+                }
+            }
+
+            if (in_array('missing_file', $types, true)) {
+                $missingRows = DB::table('product_images as pi')
+                    ->join('products as p', 'pi.product_id', '=', 'p.id')
+                    ->select('pi.id', 'pi.image')
+                    ->get()
+                    ->filter(function ($row) {
+                        $normalizedPath = $this->normalizeStoragePath($row->image);
+                        return !$normalizedPath || !Storage::exists($normalizedPath);
+                    });
+
+                foreach ($missingRows as $row) {
+                    $details[] = [
+                        'type' => 'missing_file',
+                        'image_id' => $row->id,
+                        'path' => $row->image,
+                    ];
+
+                    if (!$dryRun) {
+                        \App\Models\ProductImage::where('id', $row->id)->delete();
+                        $deleted['missing_file_records']++;
+                    }
+                }
+            }
+
+            if (in_array('file_orphan', $types, true)) {
+                $trackedPaths = $this->getTrackedProductImagePaths();
+
+                foreach ($this->scanProductImageFiles() as $file) {
+                    if (isset($trackedPaths[$file['path']]) || isset($trackedPaths[$file['filename']])) {
+                        continue;
+                    }
+
+                    $details[] = [
+                        'type' => 'file_orphan',
+                        'path' => $file['path'],
+                    ];
+
+                    if (!$dryRun && Storage::exists($file['path'])) {
+                        Storage::delete($file['path']);
+                        $deleted['file_orphans']++;
+                    }
+                }
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => $dryRun
+                    ? 'Dry run completed. No files were deleted.'
+                    : 'Orphan product images cleaned up successfully.',
+                'data' => [
+                    'dry_run' => $dryRun,
+                    'deleted' => $deleted,
+                    'preview' => array_slice($details, 0, 100),
+                    'preview_total' => count($details),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to clean up orphan product images.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // INSTRUCTION: Add this method to your Admin.php controller class
     public function updateProductLabels(Request $request)
     {
