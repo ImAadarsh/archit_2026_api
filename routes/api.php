@@ -148,3 +148,11 @@ Route::post('products/update-labels', [App\Http\Controllers\Admin::class, 'updat
 Route::get('/storage/overview', [App\Http\Controllers\Admin::class, 'getStorageOverview']);
 Route::get('/storage/product-images', [App\Http\Controllers\Admin::class, 'getProductImageStorage']);
 Route::post('/storage/product-images/cleanup', [App\Http\Controllers\Admin::class, 'cleanupOrphanProductImages']);
+
+// Product reviews (multi-image upload → public/review_images)
+Route::post('/reviews', [App\Http\Controllers\ReviewController::class, 'store']);
+Route::post('/reviews/images/upload', [App\Http\Controllers\ReviewController::class, 'uploadImages']);
+Route::get('/reviews', [App\Http\Controllers\ReviewController::class, 'index']);
+Route::get('/reviews/top-products', [App\Http\Controllers\ReviewController::class, 'topProducts']);
+Route::get('/reviews/{id}', [App\Http\Controllers\ReviewController::class, 'show']);
+Route::delete('/reviews/{id}', [App\Http\Controllers\ReviewController::class, 'destroy']);
