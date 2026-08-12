@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Product;
 use App\Models\ShopProductReview;
 use App\Models\ShopProductReviewImage;
 use Illuminate\Http\Request;
@@ -10,24 +9,20 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Product reviews with multi-image upload.
- * Images are stored the same way as product images: storage/app/public/review_images
+ * Photo-only "Living With Art" gallery.
+ * Each uploaded image becomes its own review row (one photo per review).
  */
 class ReviewController extends Controller
 {
     /**
      * POST /api/reviews
-     * Multipart: product_id*, review_text*, customer_name?, place?, purchase_date?,
-     *            is_published?, business_id?, images[]* (min 1)
+     * Multipart: images[]* (min 1). Optional: is_published, business_id, product_id.
+     * Creates one review per image — no text required.
      */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'product_id' => 'required|integer|exists:products,id',
-            'review_text' => 'required|string|min:3',
-            'customer_name' => 'nullable|string|max:255',
-            'place' => 'nullable|string|max:255',
-            'purchase_date' => 'nullable|date',
+            'product_id' => 'nullable|integer|exists:products,id',
             'business_id' => 'nullable|integer',
             'is_published' => 'nullable',
             'sort_order' => 'nullable|integer',
@@ -41,31 +36,37 @@ class ReviewController extends Controller
         if (count($files) < 1) {
             return response()->json([
                 'status' => false,
-                'message' => 'At least one review image is required.',
+                'message' => 'At least one image is required.',
             ], 400);
         }
 
         try {
-            $product = Product::findOrFail($request->product_id);
+            $businessId = (int) ($request->business_id ?: 1);
+            $productId = $request->filled('product_id') ? (int) $request->product_id : null;
+            $isPublished = $request->has('is_published')
+                ? filter_var($request->is_published, FILTER_VALIDATE_BOOLEAN)
+                : true;
+            $sortOrder = (int) ($request->sort_order ?: 0);
 
-            $review = DB::transaction(function () use ($request, $files, $product) {
-                $review = ShopProductReview::create([
-                    'product_id' => $product->id,
-                    'business_id' => (int) ($request->business_id ?: ($product->business_id ?? 1)),
-                    'customer_name' => $request->customer_name ?: null,
-                    'place' => $request->place ?: null,
-                    'purchase_date' => $request->purchase_date ?: null,
-                    'review_text' => trim($request->review_text),
-                    'is_published' => $request->has('is_published')
-                        ? filter_var($request->is_published, FILTER_VALIDATE_BOOLEAN)
-                        : true,
-                    'sort_order' => (int) ($request->sort_order ?: 0),
-                ]);
+            $created = DB::transaction(function () use ($files, $businessId, $productId, $isPublished, $sortOrder) {
+                $reviews = [];
 
                 foreach ($files as $index => $file) {
                     if (!$file || !$file->isValid()) {
                         continue;
                     }
+
+                    $review = ShopProductReview::create([
+                        'product_id' => $productId,
+                        'business_id' => $businessId,
+                        'customer_name' => null,
+                        'place' => null,
+                        'purchase_date' => null,
+                        'review_text' => null,
+                        'is_published' => $isPublished,
+                        'sort_order' => $sortOrder + $index,
+                    ]);
+
                     $ext = $file->getClientOriginalExtension() ?: 'jpg';
                     $fileName = 'review_' . $review->id . '_' . time() . '_' . uniqid() . '.' . $ext;
                     $filePath = $file->storeAs('public/review_images', $fileName);
@@ -73,15 +74,16 @@ class ReviewController extends Controller
                     ShopProductReviewImage::create([
                         'review_id' => $review->id,
                         'image' => $filePath,
-                        'sort_order' => $index,
+                        'sort_order' => 0,
                     ]);
+
+                    $reviews[] = $review->load('images');
                 }
 
-                return $review->load('images');
+                return $reviews;
             });
 
-            if ($review->images->isEmpty()) {
-                $review->delete();
+            if (empty($created)) {
                 return response()->json([
                     'status' => false,
                     'message' => 'No valid images were uploaded.',
@@ -90,13 +92,13 @@ class ReviewController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Review created successfully.',
-                'data' => $review,
+                'message' => count($created) . ' photo(s) added to Living With Art.',
+                'data' => $created,
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to create review.',
+                'message' => 'Failed to create gallery photos.',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -104,7 +106,6 @@ class ReviewController extends Controller
 
     /**
      * POST /api/reviews/images/upload
-     * Upload one or more images only (returns storage paths). Same storage style as products.
      */
     public function uploadImages(Request $request)
     {
@@ -153,11 +154,11 @@ class ReviewController extends Controller
     }
 
     /**
-     * GET /api/reviews?product_id=&business_id=&published=1
+     * GET /api/reviews?business_id=&published=1&random=1&limit=
      */
     public function index(Request $request)
     {
-        $query = ShopProductReview::with(['images', 'product:id,name,price,is_temp,is_processed']);
+        $query = ShopProductReview::with(['images']);
 
         if ($request->filled('product_id')) {
             $query->where('product_id', (int) $request->product_id);
@@ -172,7 +173,17 @@ class ReviewController extends Controller
             $query->where('is_published', true);
         }
 
-        $reviews = $query->orderByDesc('sort_order')->orderByDesc('id')->get();
+        if (filter_var($request->get('random'), FILTER_VALIDATE_BOOLEAN)) {
+            $query->inRandomOrder();
+        } else {
+            $query->orderByDesc('sort_order')->orderByDesc('id');
+        }
+
+        if ($request->filled('limit')) {
+            $query->limit(min(100, max(1, (int) $request->limit)));
+        }
+
+        $reviews = $query->get();
 
         return response()->json([
             'status' => true,
@@ -180,9 +191,6 @@ class ReviewController extends Controller
         ]);
     }
 
-    /**
-     * GET /api/reviews/{id}
-     */
     public function show($id)
     {
         $review = ShopProductReview::with(['images', 'product'])->find($id);
@@ -192,9 +200,6 @@ class ReviewController extends Controller
         return response()->json(['status' => true, 'data' => $review]);
     }
 
-    /**
-     * DELETE /api/reviews/{id}
-     */
     public function destroy($id)
     {
         $review = ShopProductReview::with('images')->find($id);
@@ -215,51 +220,24 @@ class ReviewController extends Controller
             }
             $review->delete();
 
-            return response()->json(['status' => true, 'message' => 'Review deleted.']);
+            return response()->json(['status' => true, 'message' => 'Photo deleted.']);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to delete review.',
+                'message' => 'Failed to delete.',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * GET /api/reviews/top-products?business_id=&limit=12
-     * Top reviewed products (for Shop by Review page).
+     * GET /api/reviews/top-products — kept for compatibility; returns empty when photos are unlinked.
      */
     public function topProducts(Request $request)
     {
-        $limit = min(50, max(1, (int) ($request->limit ?: 12)));
-        $businessId = (int) ($request->business_id ?: 1);
-
-        $rows = DB::table('shop_product_reviews as r')
-            ->join('products as p', 'p.id', '=', 'r.product_id')
-            ->where('r.business_id', $businessId)
-            ->where('r.is_published', 1)
-            ->where('p.is_temp', 0)
-            ->where('p.is_processed', 1)
-            ->select(
-                'p.id as product_id',
-                'p.name',
-                'p.price',
-                'p.artist_name',
-                DB::raw('COUNT(r.id) as review_count'),
-                DB::raw('MAX(r.id) as latest_review_id')
-            )
-            ->groupBy('p.id', 'p.name', 'p.price', 'p.artist_name')
-            ->orderByDesc('review_count')
-            ->orderByDesc('latest_review_id')
-            ->limit($limit)
-            ->get();
-
-        return response()->json(['status' => true, 'data' => $rows]);
+        return response()->json(['status' => true, 'data' => []]);
     }
 
-    /**
-     * Collect uploaded files from images, images[], or images[n] keys.
-     */
     private function collectImageFiles(Request $request): array
     {
         $files = [];
